@@ -2,7 +2,7 @@ import pino from "pino";
 import type Pulsar from "pulsar-client";
 import { getConfig } from "./config";
 import createHealthCheckServer from "./healthCheck";
-import keepProcessingMessages from "./messageProcessing";
+// import keepProcessingMessages from "./messageProcessing";
 import {
   createPulsarClient,
   createPulsarProducer,
@@ -181,13 +181,13 @@ const exitGracefully = async (
       logger.info("Set health check status to OK");
       setHealthOk(true);
       logger.info("Keep processing messages");
-      await keepProcessingMessages(
-        logger,
-        producer,
-        gtfsrtConsumer,
-        apcConsumer,
-        config.processing
-      );
+      // await keepProcessingMessages(
+      //   logger,
+      //   producer,
+      //   gtfsrtConsumer,
+      //   apcConsumer,
+      //   config.processing
+      // );
     } catch (err) {
       exitHandler(1, transformUnknownToError(err));
     }
