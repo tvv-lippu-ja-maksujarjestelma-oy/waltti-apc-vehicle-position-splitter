@@ -1,7 +1,7 @@
 {
   "name": "waltti-apc-vehicle-position-splitter",
   "version": "0.0.1",
-  "description": "Split Vehicle Position feed snapshots by vehicle and send only data for vehicles with APC devices onwards, each vehicle in an individual message.",
+  "description": "Split Vehicle Position feed snapshots by vehicle and send onwards only the data for vehicles with APC devices onboard, each vehicle in an individual message.",
   "main": "dist/index.js",
   "scripts": {
     "build": "npm run build:protobuf && npm run build:quicktype && npm run build:src",

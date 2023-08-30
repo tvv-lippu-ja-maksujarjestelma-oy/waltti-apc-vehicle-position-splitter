@@ -1,6 +1,6 @@
 # waltti-apc-vehicle-position-splitter
 
-Split Vehicle Position feed snapshots by vehicle and send only data for vehicles with APC devices onwards, each vehicle in an individual message.
+Split Vehicle Position feed snapshots by vehicle and send onwards only the data for vehicles with APC devices onboard, each vehicle in an individual message.
 
 This repository has been created as part of the [Waltti APC](https://github.com/tvv-lippu-ja-maksujarjestelma-oy/waltti-apc) project.
 

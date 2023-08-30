@@ -13,6 +13,17 @@ export type VehicleId = string;
 
 export type UniqueVehicleId = `${FeedPublisherId}:${VehicleId}`;
 
+export type AcceptedVehicles = Set<UniqueVehicleId>;
+
+export type LatestSentTimestamp = number;
+
+export type IsServicing = boolean;
+
+export type VehicleStateCache = Map<
+  UniqueVehicleId,
+  [LatestSentTimestamp, IsServicing]
+>;
+
 export type CountingDeviceId = MatchedApc["countingDeviceId"];
 
 export type CountingVendorName = MatchedApc["countingVendorName"];
