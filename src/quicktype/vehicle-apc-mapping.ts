@@ -1,166 +1,61 @@
 // @ts-nocheck
 // To parse this data:
 //
-//   import { Convert, StringentApcMessage } from "./file";
+//   import { Convert } from "./file";
 //
-//   const stringentApcMessage = Convert.toStringentApcMessage(json);
+//   const vehicleApcMapping = Convert.toVehicleApcMapping(json);
 //
 // These functions will throw an error if the JSON doesn't
 // match the expected interface, even if the JSON is valid.
 
 /**
- * A single message of automatic passenger counting (APC) data sent from a vehicle to a
- * centralized server. Inspired by the Helsinki Regional Transport Authority (HSL) APC
- * interface and the ITxPT APC specification.
+ * Each vehicle may contain zero, one or more installed APC devices. This schema describes a
+ * message format only for vehicles that have at least one APC device installed.
  */
-export interface StringentApcMessage {
+export interface VehicleApcMapping {
+  equipment: Equipment[];
   /**
-   * A wrapper object for the APC message
+   * The ID of the operator. A unique identifier for a vehicle in the context of the vehicle
+   * registry is formed by catenating operatorId and vehicleShortName:
+   * 'operatorId_vehicleShortName'.
    */
-  APC: Apc;
-}
-
-/**
- * A wrapper object for the APC message
- */
-export interface Apc {
+  operatorId: string;
+  seatingCapacity?: number;
+  standingCapacity?: number;
+  vehicleRegistrationNumber?: string;
   /**
-   * An ID for the onboard APC system in one vehicle. Used to differentiate between different
-   * sensor systems from different vendors in different vehicles. E.g.
-   * 'vendor1-client2-apc-device3' or possibly a UUIDv4 string. Needs to be universally unique.
+   * The number on the side of the vehicle. A unique identifier for a vehicle in the context
+   * of the vehicle registry is formed by catenating operatorId and vehicleShortName:
+   * 'operatorId_vehicleShortName'.
    */
-  countingSystemId?: string;
-  /**
-   * UUIDv4 for each unique message
-   */
-  messageId: string;
-  /**
-   * The SchemaVer version number of this JSON schema that this message follows. It must match
-   * a published SchemaVer version number from the '$id' key of this JSON schema. A valid
-   * value is for example '1-0-0' or '1-1-0'.
-   */
-  schemaVersion: string;
-  /**
-   * A timestamp for when the data was generated. An ISO 8601 UTC timestamp in the strftime
-   * format '%Y-%m-%dT%H:%M:%S.%fZ' where '%f' means milliseconds zero-padded on the left. A
-   * valid value would be e.g. '2021-11-22T10:57:08.647Z'. Use 24-hour linear smear from noon
-   * to noon UTC for leap seconds, like Google: https://developers.google.com/time/smear .
-   */
-  tst: string;
-  /**
-   * A JSON version of combining ITxPT PassengerDoorCount with PassengerVehicleCount. The
-   * format originates from HSL.
-   */
-  vehiclecounts: Vehiclecounts;
+  vehicleShortName: string;
   [property: string]: any;
 }
 
-/**
- * A JSON version of combining ITxPT PassengerDoorCount with PassengerVehicleCount. The
- * format originates from HSL.
- */
-export interface Vehiclecounts {
-  /**
-   * Information on the quality of counting
-   */
-  countquality: Countquality;
-  /**
-   * JSON version of ITxPT PassengerDoorCount
-   */
-  doorcounts: Doorcount[];
+export interface Equipment {
+  apcSystem?: string;
+  id: string;
+  type: string;
   [property: string]: any;
-}
-
-/**
- * Information on the quality of counting
- */
-export enum Countquality {
-  Defect = "defect",
-  Other = "other",
-  Regular = "regular",
-}
-
-export interface Doorcount {
-  /**
-   * JSON version of ITxPT PassengerCounting
-   */
-  count: Count[];
-  /**
-   * Identification of the door. The door closest to the front of the vehicle is 'door1'. The
-   * next door is 'door2' etc.
-   */
-  door: number | string;
-  [property: string]: any;
-}
-
-export interface Count {
-  /**
-   * Information on the passenger type
-   */
-  class: Class;
-  /**
-   * Number of passengers having boarded
-   */
-  in: number;
-  /**
-   * Number of passengers having alighted
-   */
-  out: number;
-}
-
-/**
- * Information on the passenger type
- */
-export enum Class {
-  Adult = "adult",
-  Bike = "bike",
-  Child = "child",
-  Other = "other",
-  Pram = "pram",
-  Wheelchair = "wheelchair",
 }
 
 // Converts JSON strings to/from your types
 // and asserts the results of JSON.parse at runtime
 export class Convert {
-  public static toStringentApcMessage(json: string): StringentApcMessage {
-    return cast(JSON.parse(json), r("StringentApcMessage"));
+  public static toVehicleApcMapping(json: string): VehicleApcMapping {
+    return cast(JSON.parse(json), r("VehicleApcMapping"));
   }
 
-  public static stringentApcMessageToJson(value: StringentApcMessage): string {
-    return JSON.stringify(uncast(value, r("StringentApcMessage")), null, 2);
+  public static vehicleApcMappingToJson(value: VehicleApcMapping): string {
+    return JSON.stringify(uncast(value, r("VehicleApcMapping")), null, 2);
   }
 
-  public static toApc(json: string): Apc {
-    return cast(JSON.parse(json), r("Apc"));
+  public static toEquipment(json: string): Equipment {
+    return cast(JSON.parse(json), r("Equipment"));
   }
 
-  public static apcToJson(value: Apc): string {
-    return JSON.stringify(uncast(value, r("Apc")), null, 2);
-  }
-
-  public static toVehiclecounts(json: string): Vehiclecounts {
-    return cast(JSON.parse(json), r("Vehiclecounts"));
-  }
-
-  public static vehiclecountsToJson(value: Vehiclecounts): string {
-    return JSON.stringify(uncast(value, r("Vehiclecounts")), null, 2);
-  }
-
-  public static toDoorcount(json: string): Doorcount {
-    return cast(JSON.parse(json), r("Doorcount"));
-  }
-
-  public static doorcountToJson(value: Doorcount): string {
-    return JSON.stringify(uncast(value, r("Doorcount")), null, 2);
-  }
-
-  public static toCount(json: string): Count {
-    return cast(JSON.parse(json), r("Count"));
-  }
-
-  public static countToJson(value: Count): string {
-    return JSON.stringify(uncast(value, r("Count")), null, 2);
+  public static equipmentToJson(value: Equipment): string {
+    return JSON.stringify(uncast(value, r("Equipment")), null, 2);
   }
 }
 
@@ -347,43 +242,31 @@ function r(name: string) {
 }
 
 const typeMap: any = {
-  StringentApcMessage: o([{ json: "APC", js: "APC", typ: r("Apc") }], false),
-  Apc: o(
+  VehicleApcMapping: o(
     [
+      { json: "equipment", js: "equipment", typ: a(r("Equipment")) },
+      { json: "operatorId", js: "operatorId", typ: "" },
+      { json: "seatingCapacity", js: "seatingCapacity", typ: u(undefined, 0) },
       {
-        json: "countingSystemId",
-        js: "countingSystemId",
+        json: "standingCapacity",
+        js: "standingCapacity",
+        typ: u(undefined, 0),
+      },
+      {
+        json: "vehicleRegistrationNumber",
+        js: "vehicleRegistrationNumber",
         typ: u(undefined, ""),
       },
-      { json: "messageId", js: "messageId", typ: "" },
-      { json: "schemaVersion", js: "schemaVersion", typ: "" },
-      { json: "tst", js: "tst", typ: "" },
-      { json: "vehiclecounts", js: "vehiclecounts", typ: r("Vehiclecounts") },
+      { json: "vehicleShortName", js: "vehicleShortName", typ: "" },
     ],
     "any"
   ),
-  Vehiclecounts: o(
+  Equipment: o(
     [
-      { json: "countquality", js: "countquality", typ: r("Countquality") },
-      { json: "doorcounts", js: "doorcounts", typ: a(r("Doorcount")) },
+      { json: "apcSystem", js: "apcSystem", typ: u(undefined, "") },
+      { json: "id", js: "id", typ: "" },
+      { json: "type", js: "type", typ: "" },
     ],
     "any"
   ),
-  Doorcount: o(
-    [
-      { json: "count", js: "count", typ: a(r("Count")) },
-      { json: "door", js: "door", typ: u(0, "") },
-    ],
-    "any"
-  ),
-  Count: o(
-    [
-      { json: "class", js: "class", typ: r("Class") },
-      { json: "in", js: "in", typ: 0 },
-      { json: "out", js: "out", typ: 0 },
-    ],
-    false
-  ),
-  Countquality: ["defect", "other", "regular"],
-  Class: ["adult", "bike", "child", "other", "pram", "wheelchair"],
 };
