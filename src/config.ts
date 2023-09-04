@@ -1,5 +1,5 @@
 import type pino from "pino";
-import Pulsar from "pulsar-client";
+import Pulsar, { MessageId } from "pulsar-client";
 import type { MatchedApc } from "./quicktype/matchedApc";
 import type { Apc } from "./quicktype/stringentApc";
 
@@ -10,6 +10,8 @@ export type FeedPublisherId = string;
 export type WalttiAuthorityId = string;
 
 export type VehicleId = string;
+
+export type PulsarTopic = string;
 
 export type UniqueVehicleId = `${FeedPublisherId}:${VehicleId}`;
 
@@ -35,15 +37,10 @@ export type CountingSystemMap = Map<
 
 export type TimezoneName = string;
 
-export type FeedMap = Map<
-  string,
-  [FeedPublisherId, WalttiAuthorityId, TimezoneName]
->;
+export type FeedPublisherMap = Map<PulsarTopic, FeedPublisherId>;
 
 export interface ProcessingConfig {
-  apcWaitInSeconds: number;
-  countingSystemMap: CountingSystemMap;
-  feedMap: FeedMap;
+  feedMap: FeedPublisherMap;
 }
 
 export interface PulsarOauth2Config {
@@ -63,6 +60,8 @@ export interface PulsarConfig {
   producerConfig: Pulsar.ProducerConfig;
   gtfsrtConsumerConfig: Pulsar.ConsumerConfig;
   apcConsumerConfig: Pulsar.ConsumerConfig;
+  vehicleRegistryReaderConfig: Pulsar.ReaderConfig;
+  cacheReaderConfig: Pulsar.ReaderConfig;
 }
 
 export interface HealthCheckConfig {
@@ -115,19 +114,17 @@ const getOptionalFiniteFloatWithDefault = (
   return result;
 };
 
-const getStringTripleMap = (
-  envVariable: string
-): Map<string, [string, string, string]> => {
+const getStringMap = (envVariable: string): Map<string, string> => {
   // Check the contents below. Crashing here is fine, too.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const keyValueList = JSON.parse(getRequired(envVariable));
   if (!Array.isArray(keyValueList)) {
     throw new Error(`${envVariable} must be a an array`);
   }
-  const map = new Map<string, [string, string, string]>(keyValueList);
+  const map = new Map<string, string>(keyValueList);
   if (map.size < 1) {
     throw new Error(
-      `${envVariable} must have at least one array entry in the form of [string, [string, string, string]].`
+      `${envVariable} must have at least one array entry in the form of [string, string].`
     );
   }
   if (map.size !== keyValueList.length) {
@@ -135,79 +132,22 @@ const getStringTripleMap = (
   }
   if (
     Array.from(map.values()).some(
-      (triple) => !Array.isArray(triple) || triple.length !== 3
+      (pair) => !Array.isArray(pair) || pair.length !== 1
     ) ||
     Array.from(map.entries())
       .flat(2)
       .some((x) => typeof x !== "string")
   ) {
     throw new Error(
-      `${envVariable} must contain only strings in the form of [string, [string, string, string]].`
+      `${envVariable} must contain only strings in the form of [string, string].`
     );
   }
   return map;
-};
-
-const getStringPairMap = (
-  envVariable: string
-): Map<string, [string, string]> => {
-  // Check the contents below. Crashing here is fine, too.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const keyValueList = JSON.parse(getRequired(envVariable));
-  if (!Array.isArray(keyValueList)) {
-    throw new Error(`${envVariable} must be a an array`);
-  }
-  const map = new Map<string, [string, string]>(keyValueList);
-  if (map.size < 1) {
-    throw new Error(
-      `${envVariable} must have at least one array entry in the form of [string, [string, string]].`
-    );
-  }
-  if (map.size !== keyValueList.length) {
-    throw new Error(`${envVariable} must have each key only once.`);
-  }
-  if (
-    Array.from(map.values()).some(
-      (pair) => !Array.isArray(pair) || pair.length !== 2
-    ) ||
-    Array.from(map.entries())
-      .flat(2)
-      .some((x) => typeof x !== "string")
-  ) {
-    throw new Error(
-      `${envVariable} must contain only strings in the form of [string, [string, string]].`
-    );
-  }
-  return map;
-};
-
-const getCountingSystemMap = (envVariable: string): CountingSystemMap => {
-  const pairMap = getStringPairMap(envVariable);
-  Array.from(pairMap.values()).forEach((pair) => {
-    const parts = pair[0].split(":");
-    if (
-      parts.length < 2 ||
-      parts.slice(0, -1).join("").length < 1 ||
-      parts.slice(-1).join("").length < 1
-    ) {
-      throw new Error(
-        `${envVariable} must have a colon separating non-empty strings in the form of [string, [string:string, string]].`
-      );
-    }
-  });
-  return pairMap as CountingSystemMap;
 };
 
 const getProcessingConfig = () => {
-  const apcWaitInSeconds = getOptionalFiniteFloatWithDefault(
-    "APC_WAIT_IN_SECONDS",
-    6
-  );
-  const countingSystemMap = getCountingSystemMap("COUNTING_SYSTEM_MAP");
-  const feedMap = getStringTripleMap("FEED_MAP");
+  const feedMap = getStringMap("FEED_MAP");
   return {
-    apcWaitInSeconds,
-    countingSystemMap,
     feedMap,
   };
 };
@@ -283,6 +223,8 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const gtfsrtConsumerTopicsPattern = getRequired(
     "PULSAR_GTFSRT_CONSUMER_TOPICS_PATTERN"
   );
+  const cacheReaderName = getRequired("PULSAR_CACHE_READER_NAME");
+  const cacheReaderStartMessageId = MessageId.earliest();
   const gtfsrtSubscription = getRequired("PULSAR_GTFSRT_SUBSCRIPTION");
   const gtfsrtSubscriptionType = "Exclusive";
   const gtfsrtSubscriptionInitialPosition = "Earliest";
@@ -315,6 +257,17 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
       subscription: apcSubscription,
       subscriptionType: apcSubscriptionType,
       subscriptionInitialPosition: apcSubscriptionInitialPosition,
+    },
+    // TODO: fix these configs
+    cacheReaderConfig: {
+      topic: producerTopic,
+      readerName: cacheReaderName,
+      startMessageId: cacheReaderStartMessageId,
+    },
+    vehicleRegistryReaderConfig: {
+      topic: producerTopic,
+      readerName: "vehicleRegistryReader",
+      startMessageId: cacheReaderStartMessageId,
     },
   };
 };
