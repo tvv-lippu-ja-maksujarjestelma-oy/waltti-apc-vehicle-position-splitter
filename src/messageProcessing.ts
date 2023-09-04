@@ -1,13 +1,13 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
 import type { ProcessingConfig } from "./config";
-// import { initializeMatching } from "./matching";
+import { initializeSplitting } from "./splitter";
 
 const keepReactingToGtfsrt = async (
   logger: pino.Logger,
   producer: Pulsar.Producer,
   gtfsrtConsumer: Pulsar.Consumer,
-  expandWithApcAndSend: (
+  splitVehiclesAndSend: (
     gtfsrtMessage: Pulsar.Message,
     sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
   ) => void
@@ -25,11 +25,11 @@ const keepReactingToGtfsrt = async (
       },
       "Received gtfsrtPulsarMessage"
     );
-    expandWithApcAndSend(gtfsrtPulsarMessage, (matchedApcMessage) => {
+    splitVehiclesAndSend(gtfsrtPulsarMessage, (matchedApcMessage) => {
       // In case of an error, exit via the listener on unhandledRejection.
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       producer.send(matchedApcMessage);
-      logger.debug("Matched APC message sent");
+      logger.debug("Splitter VP message sent");
     });
     logger.debug(
       {
@@ -48,17 +48,16 @@ const keepReactingToGtfsrt = async (
 };
 
 const keepReadingVehicleRegistry = async (
-  apcConsumer: Pulsar.Consumer,
-  updateApcCache: (apcMessage: Pulsar.Message) => void
+  vrReader: Pulsar.Reader,
+  updateVehicleRegistry: (apcMessage: Pulsar.Message) => void
 ): Promise<void> => {
   // Errors are handled on the main level.
   /* eslint-disable no-await-in-loop */
   for (;;) {
-    const apcMessage = await apcConsumer.receive();
-    updateApcCache(apcMessage);
+    const vrMessage = await vrReader.readNext();
+    updateVehicleRegistry(vrMessage);
     // In case of an error, exit via the listener on unhandledRejection.
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    apcConsumer.acknowledge(apcMessage);
   }
   /* eslint-enable no-await-in-loop */
 };
@@ -67,21 +66,20 @@ const keepProcessingMessages = async (
   logger: pino.Logger,
   producer: Pulsar.Producer,
   gtfsrtConsumer: Pulsar.Consumer,
-  apcConsumer: Pulsar.Consumer,
+  vrReader: Pulsar.Reader,
+  cacheReader: Pulsar.Reader,
   config: ProcessingConfig
 ): Promise<void> => {
-  const { updateApcCache, expandWithApcAndSend } = initializeMatching(
-    logger,
-    config
-  );
+  const { updateVehicleRegistry, splitVehiclesAndSend } =
+    await initializeSplitting(logger, cacheReader, vrReader, config);
   const promises = [
     keepReactingToGtfsrt(
       logger,
       producer,
       gtfsrtConsumer,
-      expandWithApcAndSend
+      splitVehiclesAndSend
     ),
-    keepReadingVehicleRegistry(apcConsumer, updateApcCache),
+    keepReadingVehicleRegistry(vrReader, updateVehicleRegistry),
   ];
   // We expect both promises to stay pending.
   await Promise.any(promises);

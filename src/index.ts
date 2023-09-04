@@ -2,11 +2,12 @@ import pino from "pino";
 import type Pulsar from "pulsar-client";
 import { getConfig } from "./config";
 import createHealthCheckServer from "./healthCheck";
-// import keepProcessingMessages from "./messageProcessing";
+import keepProcessingMessages from "./messageProcessing";
 import {
   createPulsarClient,
   createPulsarProducer,
   createPulsarConsumer,
+  createPulsarCacheReader,
 } from "./pulsar";
 import transformUnknownToError from "./util";
 
@@ -22,7 +23,8 @@ const exitGracefully = async (
   client?: Pulsar.Client,
   producer?: Pulsar.Producer,
   gtfsrtConsumer?: Pulsar.Consumer,
-  apcConsumer?: Pulsar.Consumer
+  vrReader?: Pulsar.Reader,
+  cacheReader?: Pulsar.Reader
 ) => {
   if (exitError) {
     logger.fatal(exitError);
@@ -41,14 +43,25 @@ const exitGracefully = async (
     );
   }
   try {
-    if (apcConsumer) {
-      logger.info("Close APC Pulsar consumer");
-      await apcConsumer.close();
+    if (vrReader) {
+      logger.info("Close Vehicle registry Pulsar reader");
+      await vrReader.close();
     }
   } catch (err) {
     logger.error(
       { err },
-      "Something went wrong when closing APC Pulsar consumer"
+      "Something went wrong when closing vehicle registry Pulsar reader"
+    );
+  }
+  try {
+    if (cacheReader) {
+      logger.info("Close Cache Pulsar reader");
+      await cacheReader.close();
+    }
+  } catch (err) {
+    logger.error(
+      { err },
+      "Something went wrong when closing cache Pulse reader"
     );
   }
   try {
@@ -126,7 +139,8 @@ const exitGracefully = async (
     let client: Pulsar.Client;
     let producer: Pulsar.Producer;
     let gtfsrtConsumer: Pulsar.Consumer;
-    let apcConsumer: Pulsar.Consumer;
+    let vrReader: Pulsar.Reader;
+    let cacheReader: Pulsar.Reader;
 
     const exitHandler = (exitCode: number, exitError?: Error) => {
       // Exit next.
@@ -140,7 +154,8 @@ const exitGracefully = async (
         client,
         producer,
         gtfsrtConsumer,
-        apcConsumer
+        vrReader,
+        cacheReader
       );
       /* eslint-enable @typescript-eslint/no-floating-promises */
     };
@@ -173,21 +188,28 @@ const exitGracefully = async (
         client,
         config.pulsar.gtfsrtConsumerConfig
       );
-      logger.info("Create APC Pulsar consumer");
-      apcConsumer = await createPulsarConsumer(
+      logger.info("Create Vehicle registery Pulsar reader");
+      vrReader = await createPulsarCacheReader(
         client,
-        config.pulsar.apcConsumerConfig
+        config.pulsar.vehicleRegistryReaderConfig
       );
+      logger.info("Create Vehicle cache reader");
+      cacheReader = await createPulsarCacheReader(
+        client,
+        config.pulsar.cacheReaderConfig
+      );
+
       logger.info("Set health check status to OK");
       setHealthOk(true);
       logger.info("Keep processing messages");
-      // await keepProcessingMessages(
-      //   logger,
-      //   producer,
-      //   gtfsrtConsumer,
-      //   apcConsumer,
-      //   config.processing
-      // );
+      await keepProcessingMessages(
+        logger,
+        producer,
+        gtfsrtConsumer,
+        vrReader,
+        cacheReader,
+        config.processing
+      );
     } catch (err) {
       exitHandler(1, transformUnknownToError(err));
     }
