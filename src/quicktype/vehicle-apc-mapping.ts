@@ -74,17 +74,18 @@ function prettyTypeName(typ: any): string {
   if (Array.isArray(typ)) {
     if (typ.length === 2 && typ[0] === undefined) {
       return `an optional ${prettyTypeName(typ[1])}`;
+    } else {
+      return `one of [${typ
+        .map((a) => {
+          return prettyTypeName(a);
+        })
+        .join(", ")}]`;
     }
-    return `one of [${typ
-      .map((a) => {
-        return prettyTypeName(a);
-      })
-      .join(", ")}]`;
-  }
-  if (typeof typ === "object" && typ.literal !== undefined) {
+  } else if (typeof typ === "object" && typ.literal !== undefined) {
     return typ.literal;
+  } else {
+    return typeof typ;
   }
-  return typeof typ;
 }
 
 function jsonToJSProps(typ: any): any {
@@ -188,7 +189,7 @@ function transform(
     return invalidValue(typ, val, key, parent);
   }
   if (typ === false) return invalidValue(typ, val, key, parent);
-  let ref: any;
+  let ref: any = undefined;
   while (typeof typ === "object" && typ.ref !== undefined) {
     ref = typ.ref;
     typ = typeMap[typ.ref];

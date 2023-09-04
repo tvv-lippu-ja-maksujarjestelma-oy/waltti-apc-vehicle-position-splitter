@@ -1,9 +1,5 @@
 import type pino from "pino";
 import Pulsar, { MessageId } from "pulsar-client";
-import type { MatchedApc } from "./quicktype/matchedApc";
-import type { Apc } from "./quicktype/stringentApc";
-
-export type CountingSystemId = NonNullable<Apc["countingSystemId"]>;
 
 export type FeedPublisherId = string;
 
@@ -24,15 +20,6 @@ export type IsServicing = boolean;
 export type VehicleStateCache = Map<
   UniqueVehicleId,
   [LatestSentTimestamp, IsServicing]
->;
-
-export type CountingDeviceId = MatchedApc["countingDeviceId"];
-
-export type CountingVendorName = MatchedApc["countingVendorName"];
-
-export type CountingSystemMap = Map<
-  CountingSystemId,
-  [UniqueVehicleId, CountingVendorName]
 >;
 
 export type TimezoneName = string;
@@ -95,21 +82,6 @@ const getOptionalBooleanWithDefault = (
       throw new Error(`${envVariable} must be either "false" or "true"`);
     }
     result = str === "true";
-  }
-  return result;
-};
-
-const getOptionalFiniteFloatWithDefault = (
-  envVariable: string,
-  defaultValue: number
-) => {
-  let result = defaultValue;
-  const str = getOptional(envVariable);
-  if (str !== undefined) {
-    result = Number.parseFloat(str);
-    if (!Number.isFinite(result)) {
-      throw new Error(`${envVariable} must be a finite float`);
-    }
   }
   return result;
 };
