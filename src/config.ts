@@ -195,8 +195,12 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const gtfsrtConsumerTopicsPattern = getRequired(
     "PULSAR_GTFSRT_CONSUMER_TOPICS_PATTERN"
   );
+  const cacheReaderTopic = getRequired("PULSAR_CACHE_READER_TOPIC");
   const cacheReaderName = getRequired("PULSAR_CACHE_READER_NAME");
   const cacheReaderStartMessageId = MessageId.earliest();
+  const vehicleReaderTopic = getRequired("PULSAR_VEHICLE_READER_TOPIC");
+  const vehicleReaderName = getRequired("PULSAR_VEHICLE_READER_NAME");
+  const vehicleReaderStartMessageId = MessageId.earliest();
   const gtfsrtSubscription = getRequired("PULSAR_GTFSRT_SUBSCRIPTION");
   const gtfsrtSubscriptionType = "Exclusive";
   const gtfsrtSubscriptionInitialPosition = "Earliest";
@@ -206,6 +210,7 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const apcSubscription = getRequired("PULSAR_APC_SUBSCRIPTION");
   const apcSubscriptionType = "Exclusive";
   const apcSubscriptionInitialPosition = "Earliest";
+
   return {
     oauth2Config,
     clientConfig: {
@@ -230,16 +235,15 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
       subscriptionType: apcSubscriptionType,
       subscriptionInitialPosition: apcSubscriptionInitialPosition,
     },
-    // TODO: fix these configs
     cacheReaderConfig: {
-      topic: producerTopic,
+      topic: cacheReaderTopic,
       readerName: cacheReaderName,
       startMessageId: cacheReaderStartMessageId,
     },
     vehicleRegistryReaderConfig: {
-      topic: producerTopic,
-      readerName: "vehicleRegistryReader",
-      startMessageId: cacheReaderStartMessageId,
+      topic: vehicleReaderTopic,
+      readerName: vehicleReaderName,
+      startMessageId: vehicleReaderStartMessageId,
     },
   };
 };

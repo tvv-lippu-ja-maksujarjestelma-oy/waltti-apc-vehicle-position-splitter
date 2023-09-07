@@ -1,5 +1,6 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
+import { Long } from "protobufjs";
 import type {
   UniqueVehicleId,
   PulsarTopic,
@@ -52,6 +53,27 @@ export const getUniqueVehicleIdFromVehicleApcMapping = (
     result = `${feedPublisherId}:${operatorId}_${vehicleShortName}`;
   }
   return result;
+};
+
+export const addMessageToCache = (
+  cache: VehicleStateCache,
+  cacheMessage: Pulsar.Message,
+  uniqueVehicleId: UniqueVehicleId,
+  timestamp: number | Long
+): void => {
+  const notServicing =
+    cacheMessage.getProperties()?.["notServicing"] === "true";
+
+  const cacheEntry = cache.get(uniqueVehicleId);
+  if (cacheEntry != null) {
+    if (cacheEntry[0] < Number(timestamp)) {
+      cache.set(uniqueVehicleId, [Number(timestamp), !notServicing]);
+    } else {
+      cache.set(uniqueVehicleId, [cacheEntry[0], !notServicing]);
+    }
+  } else {
+    cache.set(uniqueVehicleId, [Number(timestamp), !notServicing]);
+  }
 };
 
 export const buildUpCache = async (
@@ -114,19 +136,16 @@ export const buildUpCache = async (
       feedDetails?.feedPublisherId
     );
     // Add to cache
-
-    const notServicing =
-      cacheMessage.getProperties()?.["notServicing"] === "true";
-
     if (uniqueVehicleId != null && timestamp != null) {
-      const cacheEntry = cache.get(uniqueVehicleId);
-      if (cacheEntry != null) {
-        if (cacheEntry[0] < Number(timestamp)) {
-          cache.set(uniqueVehicleId, [Number(timestamp), !notServicing]);
-        }
-      } else {
-        cache.set(uniqueVehicleId, [Number(timestamp), !notServicing]);
-      }
+      addMessageToCache(cache, cacheMessage, uniqueVehicleId, timestamp);
+    } else {
+      logger.warn(
+        {
+          cacheMessage: JSON.stringify(cacheMessage),
+          cacheMessageDataString: dataString,
+        },
+        "Could not get uniqueVehicleId or timestamp from the cacheMessage"
+      );
     }
   }
 };
