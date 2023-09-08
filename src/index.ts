@@ -208,7 +208,8 @@ const exitGracefully = async (
         gtfsrtConsumer,
         vrReader,
         cacheReader,
-        config.processing
+        config.processing,
+        config.cacheRebuildConfig
       );
     } catch (err) {
       exitHandler(1, transformUnknownToError(err));

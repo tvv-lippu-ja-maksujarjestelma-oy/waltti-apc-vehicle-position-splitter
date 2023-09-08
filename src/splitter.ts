@@ -16,6 +16,7 @@ import type {
   AcceptedVehicles,
   VehicleStateCache,
   ProcessingConfig,
+  CacheRebuildConfig,
 } from "./config";
 
 export const splitVehicles = (
@@ -150,7 +151,6 @@ export const sendNotServicingMessages = (
           notServicing: "true",
         },
       };
-      console.log(pulsarMessage);
       sendCallback(pulsarMessage);
     }
   });
@@ -160,7 +160,8 @@ export const initializeSplitting = async (
   logger: pino.Logger,
   cacheReader: Pulsar.Reader,
   vehicleReader: Pulsar.Reader,
-  { feedMap }: ProcessingConfig
+  { feedMap }: ProcessingConfig,
+  { cacheWindowInSeconds }: CacheRebuildConfig
 ) => {
   const VehicleStateCache: VehicleStateCache = new Map<
     UniqueVehicleId,
@@ -169,7 +170,6 @@ export const initializeSplitting = async (
   const AcceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
 
   // Two days in seconds
-  const cacheWindowInSeconds = 2 * 24 * 60 * 60;
   await buildUpCache(
     logger,
     VehicleStateCache,

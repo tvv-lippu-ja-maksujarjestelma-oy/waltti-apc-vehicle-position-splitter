@@ -55,10 +55,15 @@ export interface HealthCheckConfig {
   port: number;
 }
 
+export interface CacheRebuildConfig {
+  cacheWindowInSeconds: number;
+}
+
 export interface Config {
   processing: ProcessingConfig;
   pulsar: PulsarConfig;
   healthCheck: HealthCheckConfig;
+  cacheRebuildConfig: CacheRebuildConfig;
 }
 
 const getRequired = (envVariable: string) => {
@@ -104,11 +109,9 @@ const getStringMap = (envVariable: string): Map<string, string> => {
   }
   if (
     Array.from(map.values()).some(
-      (pair) => !Array.isArray(pair) || pair.length !== 1
+      (x) => typeof x !== "string" || x.length < 1
     ) ||
-    Array.from(map.entries())
-      .flat(2)
-      .some((x) => typeof x !== "string")
+    Array.from(map.keys()).some((x) => typeof x !== "string" || x.length < 1)
   ) {
     throw new Error(
       `${envVariable} must contain only strings in the form of [string, string].`
@@ -178,6 +181,31 @@ const getPulsarCompressionType = (): Pulsar.CompressionType => {
   return compressionType;
 };
 
+const getOptionalFloat = (envVariable: string): number | undefined => {
+  const string = getOptional(envVariable);
+  return string !== undefined ? parseFloat(string) : undefined;
+};
+
+const getOptionalNonNegativeFloat = (
+  envVariable: string
+): number | undefined => {
+  const float = getOptionalFloat(envVariable);
+  if (float != null && (!Number.isFinite(float) || float < 0)) {
+    throw new Error(
+      `${envVariable} must be a non-negative, finite float if given. Instead, ${float} was given.`
+    );
+  }
+  return float;
+};
+
+const getCacheRebuildConfig = () => {
+  const cacheWindowInSeconds =
+    getOptionalNonNegativeFloat("CACHE_WINDOW_IN_SECONDS") ?? 172800;
+  return {
+    cacheWindowInSeconds,
+  };
+};
+
 const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const oauth2Config = getPulsarOauth2Config();
   const serviceUrl = getRequired("PULSAR_SERVICE_URL");
@@ -195,7 +223,6 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const gtfsrtConsumerTopicsPattern = getRequired(
     "PULSAR_GTFSRT_CONSUMER_TOPICS_PATTERN"
   );
-  const cacheReaderTopic = getRequired("PULSAR_CACHE_READER_TOPIC");
   const cacheReaderName = getRequired("PULSAR_CACHE_READER_NAME");
   const cacheReaderStartMessageId = MessageId.earliest();
   const vehicleReaderTopic = getRequired("PULSAR_VEHICLE_READER_TOPIC");
@@ -236,7 +263,7 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
       subscriptionInitialPosition: apcSubscriptionInitialPosition,
     },
     cacheReaderConfig: {
-      topic: cacheReaderTopic,
+      topic: producerTopic,
       readerName: cacheReaderName,
       startMessageId: cacheReaderStartMessageId,
     },
@@ -255,6 +282,7 @@ const getHealthCheckConfig = () => {
 
 export const getConfig = (logger: pino.Logger): Config => ({
   processing: getProcessingConfig(),
+  cacheRebuildConfig: getCacheRebuildConfig(),
   pulsar: getPulsarConfig(logger),
   healthCheck: getHealthCheckConfig(),
 });

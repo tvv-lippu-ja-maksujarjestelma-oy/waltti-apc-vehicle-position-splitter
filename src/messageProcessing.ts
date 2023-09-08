@@ -1,6 +1,6 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
-import type { ProcessingConfig } from "./config";
+import type { ProcessingConfig, CacheRebuildConfig } from "./config";
 import { initializeSplitting } from "./splitter";
 
 const keepReactingToGtfsrt = async (
@@ -68,10 +68,17 @@ const keepProcessingMessages = async (
   gtfsrtConsumer: Pulsar.Consumer,
   vrReader: Pulsar.Reader,
   cacheReader: Pulsar.Reader,
-  config: ProcessingConfig
+  config: ProcessingConfig,
+  cacheConfig: CacheRebuildConfig
 ): Promise<void> => {
   const { updateVehicleRegistry, splitVehiclesAndSend } =
-    await initializeSplitting(logger, cacheReader, vrReader, config);
+    await initializeSplitting(
+      logger,
+      cacheReader,
+      vrReader,
+      config,
+      cacheConfig
+    );
   const promises = [
     keepReactingToGtfsrt(
       logger,
