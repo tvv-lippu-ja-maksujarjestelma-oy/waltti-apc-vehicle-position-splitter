@@ -74,7 +74,7 @@ export const addMessageToCache = (
             cacheEntry: JSON.stringify(cacheEntry),
             timestamp: Number(timestamp),
             eventTimestamp: cacheMessage.getEventTimestamp(),
-            properties: cacheMessage.getProperties(),
+            properties: { ...cacheMessage.getProperties() },
           },
           // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
           `Vehicle has changed servicing status to ${!notServicing}`
@@ -87,7 +87,7 @@ export const addMessageToCache = (
           cacheEntry: JSON.stringify(cacheEntry),
           timestamp: Number(timestamp),
           eventTimestamp: cacheMessage.getEventTimestamp(),
-          properties: cacheMessage.getProperties(),
+          properties: { ...cacheMessage.getProperties() },
         },
         "Cache entry is newer than the message"
       );
@@ -122,7 +122,7 @@ export const buildUpCache = async (
           cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
-          properties: cacheMessage.getProperties(),
+          properties: { ...cacheMessage.getProperties() },
         },
         "Could not parse cacheMessage"
       );
@@ -134,7 +134,7 @@ export const buildUpCache = async (
           cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
-          properties: cacheMessage.getProperties(),
+          properties: { ...cacheMessage.getProperties() },
         },
         "Cache message does not contain a feed entity"
       );
@@ -152,7 +152,7 @@ export const buildUpCache = async (
           cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
-          properties: cacheMessage.getProperties(),
+          properties: { ...cacheMessage.getProperties() },
         },
         "Could not get feed details from the Pulsar topic name"
       );
@@ -177,7 +177,7 @@ export const buildUpCache = async (
           cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
-          properties: cacheMessage.getProperties(),
+          properties: { ...cacheMessage.getProperties() },
         },
         "Could not get uniqueVehicleId or timestamp from the cacheMessage"
       );
@@ -204,7 +204,7 @@ export const updateAcceptedVehicles = (
         vrPulsarMessage: JSON.stringify(cacheMessage),
         vrPulsarMessageDataString: dataString,
         eventTimestamp: cacheMessage.getEventTimestamp(),
-        properties: cacheMessage.getProperties(),
+        properties: { ...cacheMessage.getProperties() },
       },
       "Could not parse vehicleRegistryMessage"
     );
@@ -222,7 +222,7 @@ export const updateAcceptedVehicles = (
           apcPulsarMessage: JSON.stringify(cacheMessage),
           apcPulsarMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
-          properties: cacheMessage.getProperties(),
+          properties: { ...cacheMessage.getProperties() },
         },
         "Could not get feedPublisherId from the Pulsar topic name"
       );
