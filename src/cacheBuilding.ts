@@ -63,11 +63,23 @@ export const addMessageToCache = (
 ): void => {
   const notServicing =
     cacheMessage.getProperties()?.["isServicing"] === "false";
-
   const cacheEntry = cache.get(uniqueVehicleId);
   if (cacheEntry != null) {
     if (cacheEntry[0] < Number(timestamp)) {
       cache.set(uniqueVehicleId, [Number(timestamp), !notServicing]);
+      if (cacheEntry[1] !== notServicing) {
+        logger.info(
+          {
+            uniqueVehicleId,
+            cacheEntry: JSON.stringify(cacheEntry),
+            timestamp: Number(timestamp),
+            eventTimestamp: cacheMessage.getEventTimestamp(),
+            properties: cacheMessage.getProperties(),
+          },
+          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+          `Vehicle has changed servicing status to ${!notServicing}`
+        );
+      }
     } else {
       logger.error(
         {
@@ -95,6 +107,7 @@ export const buildUpCache = async (
   const now = Date.now();
   const startTime = now - cacheWindowInSeconds * 1000;
   await cacheReader.seekTimestamp(startTime);
+  logger.info("Building up cache");
   while (cacheReader.hasNext()) {
     // eslint-disable-next-line no-await-in-loop
     const cacheMessage = await cacheReader.readNext();
@@ -175,6 +188,7 @@ export const updateAcceptedVehicles = (
   acceptedVehicles: AcceptedVehicles
 ): void => {
   const dataString = cacheMessage.getData().toString("utf8");
+  logger.info("Updating accepted vehicles");
   let vehicleApcMessage;
   try {
     vehicleApcMessage =
@@ -227,8 +241,8 @@ export const buildAcceptedVehicles = async (
   feedMap: FeedPublisherMap
 ): Promise<void> => {
   const now = Date.now();
-
   const startTime = now - cacheWindowInSeconds * 1000;
+  logger.info("Building up accepted vehicles");
   await vehicleReader.seekTimestamp(startTime);
   let cacheMessage = await vehicleReader.readNext();
   while (vehicleReader.hasNext()) {

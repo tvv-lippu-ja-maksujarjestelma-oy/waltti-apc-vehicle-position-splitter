@@ -174,6 +174,7 @@ export const initializeSplitting = async (
     [LatestSentTimestamp, IsServicing]
   >();
   const acceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
+  logger.info("Initializing splitting");
 
   await buildUpCache(
     logger,

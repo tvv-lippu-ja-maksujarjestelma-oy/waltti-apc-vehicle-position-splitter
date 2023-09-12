@@ -299,6 +299,10 @@ test("Testing splitvehicles with multiple vehicles in message", () => {
     1667406730,
     true,
   ]);
+  expect(VehicleStateCache.get("fi:kuopio:44517_161")).toEqual([
+    1667406730,
+    true,
+  ]);
 });
 
 test("SendNotServicingMessages Should send callback when isServicing is true and vehicle is not in the message", () => {
