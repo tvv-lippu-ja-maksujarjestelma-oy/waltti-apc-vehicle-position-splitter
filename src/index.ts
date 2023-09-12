@@ -1,5 +1,6 @@
 import pino from "pino";
 import type Pulsar from "pulsar-client";
+
 import { getConfig } from "./config";
 import createHealthCheckServer from "./healthCheck";
 import keepProcessingMessages from "./messageProcessing";
@@ -10,6 +11,7 @@ import {
   createPulsarCacheReader,
 } from "./pulsar";
 import transformUnknownToError from "./util";
+import { createLogger } from "./gcpLogging";
 
 /**
  * Exit gracefully.
@@ -122,17 +124,7 @@ const exitGracefully = async (
   /* eslint-enable @typescript-eslint/no-floating-promises */
   const serviceName = "waltti-apc-vehicle-position-splitter";
   try {
-    const logger = pino(
-      {
-        name: serviceName,
-        timestamp: pino.stdTimeFunctions.isoTime,
-        redact: { paths: ["pid"], remove: true },
-        // As logger is started before config is created, read the level from
-        // env.
-        level: process.env["PINO_LOG_LEVEL"] ?? "info",
-      },
-      pino.destination({ sync: true })
-    );
+    const logger = createLogger({ name: serviceName });
 
     let setHealthOk: (isOk: boolean) => void;
     let closeHealthCheckServer: () => Promise<void>;

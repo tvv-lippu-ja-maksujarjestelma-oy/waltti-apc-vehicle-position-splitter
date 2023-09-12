@@ -154,7 +154,7 @@ export const sendNotServicingMessages = (
         data: encodedFeedMessage,
         properties: {
           originMessageId: originMessageId.toString(),
-          notServicing: "true",
+          isServicing: "false",
         },
       };
       sendCallback(pulsarMessage);

@@ -163,7 +163,7 @@ const createMockGtfsrtMessageNotServicing = ({
   transit_realtime.FeedMessage.decode(buffer);
   return mockPulsarMessage({
     topic,
-    properties: { notServicing: "true" },
+    properties: { isServicing: "false" },
     buffer,
     eventTimestamp,
   });

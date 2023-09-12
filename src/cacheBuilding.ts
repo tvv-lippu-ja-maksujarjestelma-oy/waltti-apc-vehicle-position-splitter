@@ -62,7 +62,7 @@ export const addMessageToCache = (
   timestamp: number | Long
 ): void => {
   const notServicing =
-    cacheMessage.getProperties()?.["notServicing"] === "true";
+    cacheMessage.getProperties()?.["isServicing"] === "false";
 
   const cacheEntry = cache.get(uniqueVehicleId);
   if (cacheEntry != null) {
