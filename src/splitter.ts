@@ -35,7 +35,12 @@ export const splitVehicles = (
     const uniqueVehicleId = getUniqueVehicleId(entity, feedPublisherId);
     if (uniqueVehicleId == null) {
       logger.warn(
-        { feedPublisherId, feedEntity: JSON.stringify(entity) },
+        {
+          feedPublisherId,
+          feedEntity: JSON.stringify(entity),
+          eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+          properties: gtfsrtPulsarMessage.getProperties(),
+        },
         "Could not get uniqueVehicleId from the GTFS Realtime entity"
       );
       return;
@@ -58,7 +63,12 @@ export const splitVehicles = (
         entity.vehicle?.timestamp == null
       ) {
         logger.warn(
-          { mainHeader },
+          {
+            mainHeader,
+            feedEntity: JSON.stringify(entity),
+            eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+            properties: gtfsrtPulsarMessage.getProperties(),
+          },
           "Could not get header from the GTFS Realtime message"
         );
         return;
@@ -112,6 +122,7 @@ export const sendNotServicingMessages = (
         {
           uniqueVehicleId: key,
           latestSentTimestamp: value[0],
+          timestamp: mainHeader.timestamp,
         },
         "Vehicle is not servicing, setting to false"
       );
@@ -221,11 +232,17 @@ export const initializeSplitting = async (
 
     if (feedDetails === undefined) {
       logger.warn(
-        { pulsarTopic, gtfsrtMessage: JSON.stringify(gtfsrtMessage) },
+        {
+          pulsarTopic,
+          gtfsrtMessage: JSON.stringify(gtfsrtMessage),
+          eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+          properties: gtfsrtPulsarMessage.getProperties(),
+        },
         "Could not get feed details from the Pulsar topic name"
       );
       return;
     }
+
     logger.debug(
       { nEntity: gtfsrtMessage.entity.length },
       "Handle each GTFS Realtime entity"

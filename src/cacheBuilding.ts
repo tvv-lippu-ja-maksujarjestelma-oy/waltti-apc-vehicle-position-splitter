@@ -151,6 +151,8 @@ export const buildUpCache = async (
         {
           cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
+          eventTimestamp: cacheMessage.getEventTimestamp(),
+          properties: cacheMessage.getProperties(),
         },
         "Could not get feed details from the Pulsar topic name"
       );
@@ -174,6 +176,8 @@ export const buildUpCache = async (
         {
           cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
+          eventTimestamp: cacheMessage.getEventTimestamp(),
+          properties: cacheMessage.getProperties(),
         },
         "Could not get uniqueVehicleId or timestamp from the cacheMessage"
       );
@@ -197,10 +201,12 @@ export const updateAcceptedVehicles = (
     logger.warn(
       {
         err,
-        apcPulsarMessage: JSON.stringify(cacheMessage),
-        apcPulsarMessageDataString: dataString,
+        vrPulsarMessage: JSON.stringify(cacheMessage),
+        vrPulsarMessageDataString: dataString,
+        eventTimestamp: cacheMessage.getEventTimestamp(),
+        properties: cacheMessage.getProperties(),
       },
-      "Could not parse vehicleApcMessage"
+      "Could not parse vehicleRegistryMessage"
     );
   }
   // Update acceptedVehicles
@@ -215,6 +221,8 @@ export const updateAcceptedVehicles = (
         {
           apcPulsarMessage: JSON.stringify(cacheMessage),
           apcPulsarMessageDataString: dataString,
+          eventTimestamp: cacheMessage.getEventTimestamp(),
+          properties: cacheMessage.getProperties(),
         },
         "Could not get feedPublisherId from the Pulsar topic name"
       );
