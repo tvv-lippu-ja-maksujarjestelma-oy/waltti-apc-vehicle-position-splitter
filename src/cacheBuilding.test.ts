@@ -1,4 +1,5 @@
 import Pulsar from "pulsar-client";
+import pino from "pino";
 import {
   getUniqueVehicleIdFromVehicleApcMapping,
   getFeedDetails,
@@ -344,8 +345,18 @@ const addMessage1toCache = (cache: VehicleStateCache) => {
     feedMessage1?.entity[0],
     feedDetails1?.feedPublisherId
   );
+  const logger = pino(
+    {
+      name: "waltti-apc-journey-matcher",
+      timestamp: pino.stdTimeFunctions.isoTime,
+      // As logger is started before config is created, read the level from env.
+      level: process.env["PINO_LOG_LEVEL"] ?? "info",
+    },
+    pino.destination({ sync: true })
+  );
   if (uniqueVehicleId1 != null && timestamp1 != null) {
     addMessageToCache(
+      logger,
       cache,
       gtfsrtMessageBeforeStop,
       uniqueVehicleId1,
@@ -388,9 +399,18 @@ const addMessage2toCache = (cache: VehicleStateCache) => {
     feedMessage2?.entity[0],
     feedDetails2?.feedPublisherId
   );
-
+  const logger = pino(
+    {
+      name: "waltti-apc-journey-matcher",
+      timestamp: pino.stdTimeFunctions.isoTime,
+      // As logger is started before config is created, read the level from env.
+      level: process.env["PINO_LOG_LEVEL"] ?? "info",
+    },
+    pino.destination({ sync: true })
+  );
   if (uniqueVehicleId2 != null && timestamp2 != null) {
     addMessageToCache(
+      logger,
       cache,
       gtfsrtMessageAfterStop,
       uniqueVehicleId2,
@@ -433,8 +453,18 @@ const addNotServicingMessageToCache = (cache: VehicleStateCache) => {
     feedMessage1?.entity[0],
     feedDetails1?.feedPublisherId
   );
+  const logger = pino(
+    {
+      name: "waltti-apc-journey-matcher",
+      timestamp: pino.stdTimeFunctions.isoTime,
+      // As logger is started before config is created, read the level from env.
+      level: process.env["PINO_LOG_LEVEL"] ?? "info",
+    },
+    pino.destination({ sync: true })
+  );
   if (uniqueVehicleId1 != null && timestamp1 != null) {
     addMessageToCache(
+      logger,
       cache,
       mockGtfsrtMessageNotServicing,
       uniqueVehicleId1,

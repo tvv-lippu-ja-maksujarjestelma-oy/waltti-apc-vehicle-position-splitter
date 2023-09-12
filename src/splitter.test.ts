@@ -1,4 +1,5 @@
 import pino from "pino";
+import Pulsar from "pulsar-client";
 import { transit_realtime } from "./protobuf/gtfsRealtime";
 import { splitVehicles, sendNotServicingMessages } from "./splitter";
 import type {
@@ -9,6 +10,38 @@ import type {
   LatestSentTimestamp,
   IsServicing,
 } from "./config";
+
+const mockPulsarMessage = ({
+  topic,
+  properties,
+  buffer,
+  eventTimestamp,
+}: {
+  topic: string;
+  properties: { [key: string]: string };
+  buffer: Buffer;
+  eventTimestamp: number;
+}): Pulsar.Message => {
+  const message = Object.defineProperties(new Pulsar.Message(), {
+    getProperties: {
+      value: () => properties,
+      writable: true,
+    },
+    getData: {
+      value: () => buffer,
+      writable: true,
+    },
+    getEventTimestamp: {
+      value: () => eventTimestamp,
+      writable: true,
+    },
+    getTopicName: {
+      value: () => topic,
+      writable: true,
+    },
+  });
+  return message;
+};
 
 test("Testing splitvehicles with one vehicle in message", () => {
   const logger = pino(
@@ -77,6 +110,12 @@ test("Testing splitvehicles with one vehicle in message", () => {
       ],
     });
 
+  const pulsarMessage = mockPulsarMessage({
+    topic: "fi:kuopio:vehiclepositions",
+    properties: {},
+    buffer: Buffer.from(""),
+    eventTimestamp: 0,
+  });
   splitVehicles(
     logger,
     gtfsrtMessage,
@@ -86,7 +125,8 @@ test("Testing splitvehicles with one vehicle in message", () => {
     mainHeader,
     originMessageId,
     sendCallback,
-    vehiclesInMessage
+    vehiclesInMessage,
+    pulsarMessage
   );
   expect(vehiclesInMessage.size).toBe(1);
   expect(vehiclesInMessage.has("fi:kuopio:44517_160")).toBe(true);
@@ -232,6 +272,12 @@ test("Testing splitvehicles with multiple vehicles in message", () => {
       ],
     });
 
+  const pulsarMessage = mockPulsarMessage({
+    topic: "fi:kuopio:vehiclepositions",
+    properties: {},
+    buffer: Buffer.from(""),
+    eventTimestamp: 0,
+  });
   splitVehicles(
     logger,
     gtfsrtMessage,
@@ -241,7 +287,8 @@ test("Testing splitvehicles with multiple vehicles in message", () => {
     mainHeader,
     originMessageId,
     sendCallback,
-    vehiclesInMessage
+    vehiclesInMessage,
+    pulsarMessage
   );
   expect(VehicleStateCache.size).toBe(2);
   expect(vehiclesInMessage.size).toBe(2);

@@ -1,13 +1,13 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
 import { transit_realtime } from "./protobuf/gtfsRealtime";
-import * as VehicleApcMapping from "./quicktype/vehicle-apc-mapping";
 import {
   buildUpCache,
   buildAcceptedVehicles,
   getUniqueVehicleId,
-  getUniqueVehicleIdFromVehicleApcMapping,
   getFeedDetails,
+  addMessageToCache,
+  updateAcceptedVehicles,
 } from "./cacheBuilding";
 import type {
   UniqueVehicleId,
@@ -23,12 +23,13 @@ export const splitVehicles = (
   logger: pino.Logger,
   gtfsrtMessage: transit_realtime.FeedMessage,
   feedPublisherId: string,
-  AcceptedVehicles: AcceptedVehicles,
-  VehicleStateCache: VehicleStateCache,
+  acceptedVehicles: AcceptedVehicles,
+  vehicleStateCache: VehicleStateCache,
   mainHeader: transit_realtime.IFeedHeader,
   originMessageId: string,
   sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void,
-  vehiclesInMessage: AcceptedVehicles
+  vehiclesInMessage: Set<UniqueVehicleId>,
+  gtfsrtPulsarMessage: Pulsar.Message
 ): void => {
   gtfsrtMessage.entity.forEach((entity) => {
     const uniqueVehicleId = getUniqueVehicleId(entity, feedPublisherId);
@@ -39,16 +40,13 @@ export const splitVehicles = (
       );
       return;
     }
-    if (AcceptedVehicles.has(uniqueVehicleId)) {
+    if (acceptedVehicles.has(uniqueVehicleId)) {
       // Check that this message has the newest timestamp, if not, skip it
-      const vehicleState = VehicleStateCache.get(uniqueVehicleId);
-      if (
-        !(
-          vehicleState == null ||
-          vehicleState[0] <
-            Number(entity.vehicle?.timestamp ?? mainHeader.timestamp)
-        )
-      ) {
+      const vehicleCachedState = vehicleStateCache.get(uniqueVehicleId);
+      const timestamp = Number(
+        entity.vehicle?.timestamp ?? mainHeader.timestamp
+      );
+      if (vehicleCachedState != null && vehicleCachedState[0] > timestamp) {
         return;
       }
 
@@ -68,16 +66,15 @@ export const splitVehicles = (
       const header = transit_realtime.FeedHeader.create({
         gtfsRealtimeVersion: mainHeader.gtfsRealtimeVersion,
         incrementality: mainHeader.incrementality,
-        timestamp: entity.vehicle?.timestamp ?? mainHeader.timestamp,
+        timestamp,
       });
 
-      const FeedMessage = transit_realtime.FeedMessage.create({
+      const feedMessage = transit_realtime.FeedMessage.create({
         entity: [entity],
         header,
       });
       const encodedFeedMessage = Buffer.from(
-        JSON.stringify(FeedMessage),
-        "utf8"
+        transit_realtime.FeedMessage.encode(feedMessage).finish()
       );
       const pulsarMessage: Pulsar.ProducerMessage = {
         data: encodedFeedMessage,
@@ -86,10 +83,13 @@ export const splitVehicles = (
         },
       };
       // Update the cache using the new message timestamp
-      VehicleStateCache.set(uniqueVehicleId, [
-        Number(entity.vehicle?.timestamp ?? mainHeader.timestamp),
-        true,
-      ]);
+      addMessageToCache(
+        logger,
+        vehicleStateCache,
+        gtfsrtPulsarMessage,
+        uniqueVehicleId,
+        timestamp
+      );
       vehiclesInMessage.add(uniqueVehicleId);
       sendCallback(pulsarMessage);
     }
@@ -98,16 +98,23 @@ export const splitVehicles = (
 
 export const sendNotServicingMessages = (
   logger: pino.Logger,
-  VehicleStateCache: VehicleStateCache,
+  vehicleStateCache: VehicleStateCache,
   vehiclesInMessage: AcceptedVehicles,
   mainHeader: transit_realtime.IFeedHeader,
   originMessageId: string,
   sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
 ): void => {
-  VehicleStateCache.forEach((value, key) => {
+  vehicleStateCache.forEach((value, key) => {
     if (value[1] && !vehiclesInMessage.has(key)) {
-      VehicleStateCache.set(key, [value[0], false]);
+      vehicleStateCache.set(key, [value[0], false]);
 
+      logger.info(
+        {
+          uniqueVehicleId: key,
+          latestSentTimestamp: value[0],
+        },
+        "Vehicle is not servicing, setting to false"
+      );
       // send one VP message for each missing vehicle onwards, where the sent VP message only has the VehicleDescriptor part. This time copy the header timestamp to vehicle timestamp
       if (
         mainHeader.gtfsRealtimeVersion == null ||
@@ -126,7 +133,7 @@ export const sendNotServicingMessages = (
         timestamp: mainHeader.timestamp,
       });
 
-      const FeedMessage = transit_realtime.FeedMessage.create({
+      const feedMessage = transit_realtime.FeedMessage.create({
         entity: [
           transit_realtime.FeedEntity.create({
             id: key,
@@ -141,8 +148,7 @@ export const sendNotServicingMessages = (
         header,
       });
       const encodedFeedMessage = Buffer.from(
-        JSON.stringify(FeedMessage),
-        "utf8"
+        transit_realtime.FeedMessage.encode(feedMessage).finish()
       );
       const pulsarMessage: Pulsar.ProducerMessage = {
         data: encodedFeedMessage,
@@ -163,16 +169,15 @@ export const initializeSplitting = async (
   { feedMap }: ProcessingConfig,
   { cacheWindowInSeconds }: CacheRebuildConfig
 ) => {
-  const VehicleStateCache: VehicleStateCache = new Map<
+  const vehicleStateCache: VehicleStateCache = new Map<
     UniqueVehicleId,
     [LatestSentTimestamp, IsServicing]
   >();
-  const AcceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
+  const acceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
 
-  // Two days in seconds
   await buildUpCache(
     logger,
-    VehicleStateCache,
+    vehicleStateCache,
     cacheReader,
     cacheWindowInSeconds,
     feedMap
@@ -180,60 +185,21 @@ export const initializeSplitting = async (
 
   await buildAcceptedVehicles(
     logger,
-    AcceptedVehicles,
+    acceptedVehicles,
     vehicleReader,
     cacheWindowInSeconds,
     feedMap
   );
 
-  const updateVehicleRegistry = (apcPulsarMessage: Pulsar.Message) => {
-    const dataString = apcPulsarMessage.getData().toString("utf8");
-    let vehicleApcMessage;
-    try {
-      vehicleApcMessage =
-        VehicleApcMapping.Convert.toVehicleApcMapping(dataString);
-    } catch (err) {
-      logger.warn(
-        {
-          err,
-          apcPulsarMessage: JSON.stringify(apcPulsarMessage),
-          apcPulsarMessageDataString: dataString,
-        },
-        "Could not parse vehicleApcMessage"
-      );
-    }
-    // Update AcceptedVehicles
-    if (vehicleApcMessage != null) {
-      const pulsarTopic = apcPulsarMessage.getTopicName();
-      const feedPublisherId = getFeedDetails(
-        feedMap,
-        pulsarTopic
-      )?.feedPublisherId;
-      if (feedPublisherId == null) {
-        logger.warn(
-          {
-            apcPulsarMessage: JSON.stringify(apcPulsarMessage),
-            apcPulsarMessageDataString: dataString,
-          },
-          "Could not get feedPublisherId from the Pulsar topic name"
-        );
-        return;
-      }
-      const uniqueVehicleId = getUniqueVehicleIdFromVehicleApcMapping(
-        vehicleApcMessage,
-        feedPublisherId
-      );
-      if (uniqueVehicleId != null) {
-        AcceptedVehicles.add(uniqueVehicleId);
-      }
-    }
+  const updateVehicleRegistryCache = (vrPulsarMessage: Pulsar.Message) => {
+    updateAcceptedVehicles(logger, vrPulsarMessage, feedMap, acceptedVehicles);
   };
 
   const splitVehiclesAndSend = (
     gtfsrtPulsarMessage: Pulsar.Message,
     sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
   ): void => {
-    const vehiclesInMessage: AcceptedVehicles = new Set<UniqueVehicleId>();
+    const vehiclesInMessage: Set<UniqueVehicleId> = new Set<UniqueVehicleId>();
     let gtfsrtMessage;
     try {
       gtfsrtMessage = transit_realtime.FeedMessage.decode(
@@ -268,18 +234,19 @@ export const initializeSplitting = async (
       logger,
       gtfsrtMessage,
       feedDetails.feedPublisherId,
-      AcceptedVehicles,
-      VehicleStateCache,
+      acceptedVehicles,
+      vehicleStateCache,
       mainHeader,
       originMessageId.toString(),
       sendCallback,
-      vehiclesInMessage
+      vehiclesInMessage,
+      gtfsrtPulsarMessage
     );
 
     // Loop through the cache and set vehicles that have not been seen in the message to false
     sendNotServicingMessages(
       logger,
-      VehicleStateCache,
+      vehicleStateCache,
       vehiclesInMessage,
       mainHeader,
       originMessageId.toString(),
@@ -288,7 +255,7 @@ export const initializeSplitting = async (
   };
 
   return {
-    updateVehicleRegistry,
+    updateVehicleRegistryCache,
     splitVehiclesAndSend,
   };
 };
