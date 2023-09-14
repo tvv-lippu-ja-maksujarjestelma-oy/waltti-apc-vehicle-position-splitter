@@ -46,7 +46,6 @@ export interface PulsarConfig {
   clientConfig: Pulsar.ClientConfig;
   producerConfig: Pulsar.ProducerConfig;
   gtfsrtConsumerConfig: Pulsar.ConsumerConfig;
-  apcConsumerConfig: Pulsar.ConsumerConfig;
   vehicleRegistryReaderConfig: Pulsar.ReaderConfig;
   cacheReaderConfig: Pulsar.ReaderConfig;
 }
@@ -231,12 +230,6 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const gtfsrtSubscription = getRequired("PULSAR_GTFSRT_SUBSCRIPTION");
   const gtfsrtSubscriptionType = "Exclusive";
   const gtfsrtSubscriptionInitialPosition = "Earliest";
-  const apcConsumerTopicsPattern = getRequired(
-    "PULSAR_APC_CONSUMER_TOPICS_PATTERN"
-  );
-  const apcSubscription = getRequired("PULSAR_APC_SUBSCRIPTION");
-  const apcSubscriptionType = "Exclusive";
-  const apcSubscriptionInitialPosition = "Earliest";
 
   return {
     oauth2Config,
@@ -255,12 +248,6 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
       subscription: gtfsrtSubscription,
       subscriptionType: gtfsrtSubscriptionType,
       subscriptionInitialPosition: gtfsrtSubscriptionInitialPosition,
-    },
-    apcConsumerConfig: {
-      topicsPattern: apcConsumerTopicsPattern,
-      subscription: apcSubscription,
-      subscriptionType: apcSubscriptionType,
-      subscriptionInitialPosition: apcSubscriptionInitialPosition,
     },
     cacheReaderConfig: {
       topic: producerTopic,
