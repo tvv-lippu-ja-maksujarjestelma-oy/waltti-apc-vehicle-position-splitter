@@ -23,6 +23,9 @@ lib-cov
 coverage
 *.lcov
 
+#Ignore .DS_Store files
+.DS_Store
+
 # nyc test coverage
 .nyc_output
 
