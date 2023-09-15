@@ -42,20 +42,12 @@ export interface Equipment {
 // Converts JSON strings to/from your types
 // and asserts the results of JSON.parse at runtime
 export class Convert {
-  public static toVehicleApcMapping(json: string): VehicleApcMapping {
-    return cast(JSON.parse(json), r("VehicleApcMapping"));
+  public static toVehicleApcMapping(json: string): VehicleApcMapping[] {
+    return cast(JSON.parse(json), a(r("VehicleApcMapping")));
   }
 
-  public static vehicleApcMappingToJson(value: VehicleApcMapping): string {
-    return JSON.stringify(uncast(value, r("VehicleApcMapping")), null, 2);
-  }
-
-  public static toEquipment(json: string): Equipment {
-    return cast(JSON.parse(json), r("Equipment"));
-  }
-
-  public static equipmentToJson(value: Equipment): string {
-    return JSON.stringify(uncast(value, r("Equipment")), null, 2);
+  public static vehicleApcMappingToJson(value: VehicleApcMapping[]): string {
+    return JSON.stringify(uncast(value, a(r("VehicleApcMapping"))), null, 2);
   }
 }
 

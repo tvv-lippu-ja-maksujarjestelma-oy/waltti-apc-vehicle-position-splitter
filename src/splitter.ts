@@ -1,80 +1,195 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
 import { transit_realtime } from "./protobuf/gtfsRealtime";
-import * as VehicleApcMapping from "./quicktype/vehicle-apc-mapping";
-import { buildUpCache, buildAcceptedVehicles } from "./cacheBuilding";
+import {
+  buildUpCache,
+  buildAcceptedVehicles,
+  getUniqueVehicleId,
+  getFeedDetails,
+  addMessageToCache,
+  updateAcceptedVehicles,
+} from "./cacheBuilding";
 import type {
   UniqueVehicleId,
   IsServicing,
   LatestSentTimestamp,
   AcceptedVehicles,
   VehicleStateCache,
-  FeedPublisherMap,
   ProcessingConfig,
-  FeedPublisherId,
-  PulsarTopic,
+  CacheRebuildConfig,
 } from "./config";
 
-export const getUniqueVehicleId = (
-  entity: transit_realtime.IFeedEntity,
-  feedPublisherId: string
-): UniqueVehicleId | undefined => {
-  let result: UniqueVehicleId | undefined;
-  const vehicleId = entity.vehicle?.vehicle?.id;
-  if (vehicleId != null) {
-    result = `${feedPublisherId}:${vehicleId}`;
-  }
-  return result;
-};
-
-export const getUniqueVehicleIdFromVehicleApcMapping = (
-  vehicleApcMapping: VehicleApcMapping.VehicleApcMapping,
-  feedPublisherId: string
-): UniqueVehicleId | undefined => {
-  let result: UniqueVehicleId | undefined;
-  const { operatorId } = vehicleApcMapping;
-  const { vehicleShortName } = vehicleApcMapping;
-  if (operatorId != null && vehicleShortName != null) {
-    result = `${feedPublisherId}:${operatorId}_${vehicleShortName}`;
-  }
-  return result;
-};
-
-export const getFeedDetails = (
-  feedMap: FeedPublisherMap,
-  topic: PulsarTopic
-):
-  | {
-      feedPublisherId: FeedPublisherId;
+export const splitVehicles = (
+  logger: pino.Logger,
+  gtfsrtMessage: transit_realtime.FeedMessage,
+  feedPublisherId: string,
+  acceptedVehicles: AcceptedVehicles,
+  vehicleStateCache: VehicleStateCache,
+  mainHeader: transit_realtime.IFeedHeader,
+  originMessageId: string,
+  sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void,
+  vehiclesInMessage: Set<UniqueVehicleId>,
+  gtfsrtPulsarMessage: Pulsar.Message
+): void => {
+  gtfsrtMessage.entity.forEach((entity) => {
+    const uniqueVehicleId = getUniqueVehicleId(entity, feedPublisherId);
+    if (uniqueVehicleId == null) {
+      logger.warn(
+        {
+          feedPublisherId,
+          feedEntity: JSON.stringify(entity),
+          eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+          properties: gtfsrtPulsarMessage.getProperties(),
+        },
+        "Could not get uniqueVehicleId from the GTFS Realtime entity"
+      );
+      return;
     }
-  | undefined => {
-  let result;
-  const feedPublisherId = feedMap.get(topic);
-  if (feedPublisherId !== undefined) {
-    result = {
-      feedPublisherId,
-    };
-  }
-  return result;
+    if (acceptedVehicles.has(uniqueVehicleId)) {
+      // Check that this message has the newest timestamp, if not, skip it
+      const vehicleCachedState = vehicleStateCache.get(uniqueVehicleId);
+      const timestamp = Number(
+        entity.vehicle?.timestamp ?? mainHeader.timestamp
+      );
+      if (vehicleCachedState != null && vehicleCachedState[0] > timestamp) {
+        return;
+      }
+
+      // Create a new header for the new message
+      if (
+        mainHeader.gtfsRealtimeVersion == null ||
+        mainHeader.incrementality == null ||
+        mainHeader.timestamp == null ||
+        entity.vehicle?.timestamp == null
+      ) {
+        logger.warn(
+          {
+            mainHeader,
+            feedEntity: JSON.stringify(entity),
+            eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+            properties: gtfsrtPulsarMessage.getProperties(),
+          },
+          "Could not get header from the GTFS Realtime message"
+        );
+        return;
+      }
+      const header = transit_realtime.FeedHeader.create({
+        gtfsRealtimeVersion: mainHeader.gtfsRealtimeVersion,
+        incrementality: mainHeader.incrementality,
+        timestamp,
+      });
+
+      const feedMessage = transit_realtime.FeedMessage.create({
+        entity: [entity],
+        header,
+      });
+      const encodedFeedMessage = Buffer.from(
+        transit_realtime.FeedMessage.encode(feedMessage).finish()
+      );
+      const pulsarMessage: Pulsar.ProducerMessage = {
+        data: encodedFeedMessage,
+        properties: {
+          originMessageId,
+        },
+      };
+      // Update the cache using the new message timestamp
+      addMessageToCache(
+        logger,
+        vehicleStateCache,
+        gtfsrtPulsarMessage,
+        uniqueVehicleId,
+        timestamp
+      );
+      vehiclesInMessage.add(uniqueVehicleId);
+      sendCallback(pulsarMessage);
+    }
+  });
+};
+
+export const sendNotServicingMessages = (
+  logger: pino.Logger,
+  vehicleStateCache: VehicleStateCache,
+  vehiclesInMessage: AcceptedVehicles,
+  mainHeader: transit_realtime.IFeedHeader,
+  originMessageId: string,
+  sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
+): void => {
+  vehicleStateCache.forEach((value, key) => {
+    if (value[1] && !vehiclesInMessage.has(key)) {
+      vehicleStateCache.set(key, [value[0], false]);
+
+      logger.info(
+        {
+          uniqueVehicleId: key,
+          latestSentTimestamp: value[0],
+          timestamp: mainHeader.timestamp,
+        },
+        "Vehicle is not servicing, setting to false"
+      );
+      // send one VP message for each missing vehicle onwards, where the sent VP message only has the VehicleDescriptor part. This time copy the header timestamp to vehicle timestamp
+      if (
+        mainHeader.gtfsRealtimeVersion == null ||
+        mainHeader.incrementality == null ||
+        mainHeader.timestamp == null
+      ) {
+        logger.warn(
+          { mainHeader },
+          "Could not get header from the GTFS Realtime message"
+        );
+        return;
+      }
+      const header = transit_realtime.FeedHeader.create({
+        gtfsRealtimeVersion: mainHeader.gtfsRealtimeVersion,
+        incrementality: mainHeader.incrementality,
+        timestamp: mainHeader.timestamp,
+      });
+
+      const feedMessage = transit_realtime.FeedMessage.create({
+        entity: [
+          transit_realtime.FeedEntity.create({
+            id: key,
+            vehicle: transit_realtime.VehiclePosition.create({
+              timestamp: mainHeader.timestamp,
+              vehicle: transit_realtime.VehicleDescriptor.create({
+                id: key,
+              }),
+            }),
+          }),
+        ],
+        header,
+      });
+      const encodedFeedMessage = Buffer.from(
+        transit_realtime.FeedMessage.encode(feedMessage).finish()
+      );
+      const pulsarMessage: Pulsar.ProducerMessage = {
+        data: encodedFeedMessage,
+        properties: {
+          originMessageId: originMessageId.toString(),
+          isServicing: "false",
+        },
+      };
+      sendCallback(pulsarMessage);
+    }
+  });
 };
 
 export const initializeSplitting = async (
   logger: pino.Logger,
   cacheReader: Pulsar.Reader,
   vehicleReader: Pulsar.Reader,
-  { feedMap }: ProcessingConfig
+  { feedMap }: ProcessingConfig,
+  { cacheWindowInSeconds }: CacheRebuildConfig
 ) => {
-  const VehicleStateCache: VehicleStateCache = new Map<
+  const vehicleStateCache: VehicleStateCache = new Map<
     UniqueVehicleId,
     [LatestSentTimestamp, IsServicing]
   >();
-  const AcceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
+  const acceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
+  logger.info("Initializing splitting");
 
-  // Two days in seconds
-  const cacheWindowInSeconds = 2 * 24 * 60 * 60;
   await buildUpCache(
     logger,
-    VehicleStateCache,
+    vehicleStateCache,
     cacheReader,
     cacheWindowInSeconds,
     feedMap
@@ -82,60 +197,21 @@ export const initializeSplitting = async (
 
   await buildAcceptedVehicles(
     logger,
-    AcceptedVehicles,
+    acceptedVehicles,
     vehicleReader,
     cacheWindowInSeconds,
     feedMap
   );
 
-  const updateVehicleRegistry = (apcPulsarMessage: Pulsar.Message) => {
-    const dataString = apcPulsarMessage.getData().toString("utf8");
-    let vehicleApcMessage;
-    try {
-      vehicleApcMessage =
-        VehicleApcMapping.Convert.toVehicleApcMapping(dataString);
-    } catch (err) {
-      logger.warn(
-        {
-          err,
-          apcPulsarMessage: JSON.stringify(apcPulsarMessage),
-          apcPulsarMessageDataString: dataString,
-        },
-        "Could not parse vehicleApcMessage"
-      );
-    }
-    // Update AcceptedVehicles
-    if (vehicleApcMessage != null) {
-      const pulsarTopic = apcPulsarMessage.getTopicName();
-      const feedPublisherId = getFeedDetails(
-        feedMap,
-        pulsarTopic
-      )?.feedPublisherId;
-      if (feedPublisherId == null) {
-        logger.warn(
-          {
-            apcPulsarMessage: JSON.stringify(apcPulsarMessage),
-            apcPulsarMessageDataString: dataString,
-          },
-          "Could not get feedPublisherId from the Pulsar topic name"
-        );
-        return;
-      }
-      const uniqueVehicleId = getUniqueVehicleIdFromVehicleApcMapping(
-        vehicleApcMessage,
-        feedPublisherId
-      );
-      if (uniqueVehicleId != null) {
-        AcceptedVehicles.add(uniqueVehicleId);
-      }
-    }
+  const updateVehicleRegistryCache = (vrPulsarMessage: Pulsar.Message) => {
+    updateAcceptedVehicles(logger, vrPulsarMessage, feedMap, acceptedVehicles);
   };
 
   const splitVehiclesAndSend = (
     gtfsrtPulsarMessage: Pulsar.Message,
     sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
   ): void => {
-    const vehiclesInMessage: AcceptedVehicles = new Set<UniqueVehicleId>();
+    const vehiclesInMessage: Set<UniqueVehicleId> = new Set<UniqueVehicleId>();
     let gtfsrtMessage;
     try {
       gtfsrtMessage = transit_realtime.FeedMessage.decode(
@@ -156,139 +232,48 @@ export const initializeSplitting = async (
 
     if (feedDetails === undefined) {
       logger.warn(
-        { pulsarTopic, gtfsrtMessage: JSON.stringify(gtfsrtMessage) },
+        {
+          pulsarTopic,
+          gtfsrtMessage: JSON.stringify(gtfsrtMessage),
+          eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+          properties: gtfsrtPulsarMessage.getProperties(),
+        },
         "Could not get feed details from the Pulsar topic name"
       );
       return;
     }
+
     logger.debug(
       { nEntity: gtfsrtMessage.entity.length },
       "Handle each GTFS Realtime entity"
     );
 
-    gtfsrtMessage.entity.forEach((entity) => {
-      const uniqueVehicleId = getUniqueVehicleId(
-        entity,
-        feedDetails.feedPublisherId
-      );
-      if (uniqueVehicleId == null) {
-        logger.warn(
-          { feedDetails, feedEntity: JSON.stringify(entity) },
-          "Could not get uniqueVehicleId from the GTFS Realtime entity"
-        );
-        return;
-      }
-      if (AcceptedVehicles.has(uniqueVehicleId)) {
-        // Check that this message has the newest timestamp, if not, skip it
-        const vehicleState = VehicleStateCache.get(uniqueVehicleId);
-        if (
-          !(
-            vehicleState == null ||
-            vehicleState[0] <
-              Number(entity.vehicle?.timestamp ?? mainHeader.timestamp)
-          )
-        ) {
-          return;
-        }
-
-        // Create a new header for the new message
-        if (
-          mainHeader.gtfsRealtimeVersion == null ||
-          mainHeader.incrementality == null ||
-          mainHeader.timestamp == null ||
-          entity.vehicle?.timestamp == null
-        ) {
-          logger.warn(
-            { mainHeader },
-            "Could not get header from the GTFS Realtime message"
-          );
-          return;
-        }
-        const header = transit_realtime.FeedHeader.create({
-          gtfsRealtimeVersion: mainHeader.gtfsRealtimeVersion,
-          incrementality: mainHeader.incrementality,
-          timestamp: entity.vehicle?.timestamp ?? mainHeader.timestamp,
-        });
-
-        const FeedMessage = transit_realtime.FeedMessage.create({
-          entity: [entity],
-          header,
-        });
-        const encodedFeedMessage = Buffer.from(
-          JSON.stringify(FeedMessage),
-          "utf8"
-        );
-        const pulsarMessage: Pulsar.ProducerMessage = {
-          data: encodedFeedMessage,
-          properties: {
-            originMessageId: originMessageId.toString(),
-          },
-        };
-        // Update the cache using the new message timestamp
-        VehicleStateCache.set(uniqueVehicleId, [
-          Number(entity.vehicle?.timestamp ?? mainHeader.timestamp),
-          true,
-        ]);
-        vehiclesInMessage.add(uniqueVehicleId);
-        sendCallback(pulsarMessage);
-      }
-    });
+    splitVehicles(
+      logger,
+      gtfsrtMessage,
+      feedDetails.feedPublisherId,
+      acceptedVehicles,
+      vehicleStateCache,
+      mainHeader,
+      originMessageId.toString(),
+      sendCallback,
+      vehiclesInMessage,
+      gtfsrtPulsarMessage
+    );
 
     // Loop through the cache and set vehicles that have not been seen in the message to false
-    VehicleStateCache.forEach((value, key) => {
-      if (value[1] && !vehiclesInMessage.has(key)) {
-        VehicleStateCache.set(key, [value[0], false]);
-
-        // send one VP message for each missing vehicle onwards, where the sent VP message only has the VehicleDescriptor part. This time copy the header timestamp to vehicle timestamp
-        if (
-          mainHeader.gtfsRealtimeVersion == null ||
-          mainHeader.incrementality == null ||
-          mainHeader.timestamp == null
-        ) {
-          logger.warn(
-            { mainHeader },
-            "Could not get header from the GTFS Realtime message"
-          );
-          return;
-        }
-        const header = transit_realtime.FeedHeader.create({
-          gtfsRealtimeVersion: mainHeader.gtfsRealtimeVersion,
-          incrementality: mainHeader.incrementality,
-          timestamp: mainHeader.timestamp,
-        });
-
-        const FeedMessage = transit_realtime.FeedMessage.create({
-          entity: [
-            transit_realtime.FeedEntity.create({
-              id: key,
-              vehicle: transit_realtime.VehiclePosition.create({
-                timestamp: mainHeader.timestamp,
-                vehicle: transit_realtime.VehicleDescriptor.create({
-                  id: key,
-                }),
-              }),
-            }),
-          ],
-          header,
-        });
-        const encodedFeedMessage = Buffer.from(
-          JSON.stringify(FeedMessage),
-          "utf8"
-        );
-        const pulsarMessage: Pulsar.ProducerMessage = {
-          data: encodedFeedMessage,
-          properties: {
-            originMessageId: originMessageId.toString(),
-            notServicing: "true",
-          },
-        };
-        sendCallback(pulsarMessage);
-      }
-    });
+    sendNotServicingMessages(
+      logger,
+      vehicleStateCache,
+      vehiclesInMessage,
+      mainHeader,
+      originMessageId.toString(),
+      sendCallback
+    );
   };
 
   return {
-    updateVehicleRegistry,
+    updateVehicleRegistryCache,
     splitVehiclesAndSend,
   };
 };
