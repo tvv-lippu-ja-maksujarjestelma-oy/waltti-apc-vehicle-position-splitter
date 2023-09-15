@@ -92,15 +92,19 @@ const getOptionalBooleanWithDefault = (
 
 const getStringMap = (envVariable: string): Map<string, string> => {
   // Check the contents below. Crashing here is fine, too.
+  console.log("envVariable", getRequired(envVariable));
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const keyValueList = JSON.parse(getRequired(envVariable));
+  console.log("keyValueList", keyValueList);
   if (!Array.isArray(keyValueList)) {
     throw new Error(`${envVariable} must be a an array`);
   }
   const map = new Map<string, string>(keyValueList);
   if (map.size < 1) {
     throw new Error(
-      `${envVariable} must have at least one array entry in the form of [string, string].`
+      `${envVariable} must have at least one array entry in the form of [string, string]. Now got ${JSON.stringify(
+        map
+      )}.`
     );
   }
   if (map.size !== keyValueList.length) {
@@ -113,7 +117,9 @@ const getStringMap = (envVariable: string): Map<string, string> => {
     Array.from(map.keys()).some((x) => typeof x !== "string" || x.length < 1)
   ) {
     throw new Error(
-      `${envVariable} must contain only strings in the form of [string, string].`
+      `${envVariable} must contain only strings in the form of [string, string]. Now got ${JSON.stringify(
+        map
+      )}.`
     );
   }
   return map;
