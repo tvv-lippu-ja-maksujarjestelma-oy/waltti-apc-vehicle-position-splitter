@@ -92,10 +92,8 @@ const getOptionalBooleanWithDefault = (
 
 const getStringMap = (envVariable: string): Map<string, string> => {
   // Check the contents below. Crashing here is fine, too.
-  console.log("envVariable", getRequired(envVariable));
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const keyValueList = JSON.parse(getRequired(envVariable));
-  console.log("keyValueList", keyValueList);
   if (!Array.isArray(keyValueList)) {
     throw new Error(`${envVariable} must be a an array`);
   }
