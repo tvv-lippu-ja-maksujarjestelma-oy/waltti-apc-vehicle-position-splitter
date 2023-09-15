@@ -1,6 +1,6 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
-import type { ProcessingConfig } from "./config";
+import type { ProcessingConfig, CacheRebuildConfig } from "./config";
 import { initializeSplitting } from "./splitter";
 
 const keepReactingToGtfsrt = async (
@@ -9,7 +9,7 @@ const keepReactingToGtfsrt = async (
   gtfsrtConsumer: Pulsar.Consumer,
   splitVehiclesAndSend: (
     gtfsrtMessage: Pulsar.Message,
-    sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
+    sendCallback: (splittedVehicleMessage: Pulsar.ProducerMessage) => void
   ) => void
 ) => {
   // Errors are handled in the calling function.
@@ -21,15 +21,16 @@ const keepReactingToGtfsrt = async (
         topic: gtfsrtPulsarMessage.getTopicName(),
         eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
         messageId: gtfsrtPulsarMessage.getMessageId().toString(),
+        // Logging does not work for properties
         properties: gtfsrtPulsarMessage.getProperties(),
       },
       "Received gtfsrtPulsarMessage"
     );
-    splitVehiclesAndSend(gtfsrtPulsarMessage, (matchedApcMessage) => {
+    splitVehiclesAndSend(gtfsrtPulsarMessage, (splittedVehicle) => {
+      logger.debug("Sending splitter VP message");
       // In case of an error, exit via the listener on unhandledRejection.
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      producer.send(matchedApcMessage);
-      logger.debug("Splitter VP message sent");
+      producer.send(splittedVehicle);
     });
     logger.debug(
       {
@@ -49,15 +50,13 @@ const keepReactingToGtfsrt = async (
 
 const keepReadingVehicleRegistry = async (
   vrReader: Pulsar.Reader,
-  updateVehicleRegistry: (apcMessage: Pulsar.Message) => void
+  updateVehicleRegistryCache: (apcMessage: Pulsar.Message) => void
 ): Promise<void> => {
   // Errors are handled on the main level.
   /* eslint-disable no-await-in-loop */
   for (;;) {
     const vrMessage = await vrReader.readNext();
-    updateVehicleRegistry(vrMessage);
-    // In case of an error, exit via the listener on unhandledRejection.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    updateVehicleRegistryCache(vrMessage);
   }
   /* eslint-enable no-await-in-loop */
 };
@@ -68,10 +67,17 @@ const keepProcessingMessages = async (
   gtfsrtConsumer: Pulsar.Consumer,
   vrReader: Pulsar.Reader,
   cacheReader: Pulsar.Reader,
-  config: ProcessingConfig
+  processingConfig: ProcessingConfig,
+  cacheConfig: CacheRebuildConfig
 ): Promise<void> => {
-  const { updateVehicleRegistry, splitVehiclesAndSend } =
-    await initializeSplitting(logger, cacheReader, vrReader, config);
+  const { updateVehicleRegistryCache, splitVehiclesAndSend } =
+    await initializeSplitting(
+      logger,
+      cacheReader,
+      vrReader,
+      processingConfig,
+      cacheConfig
+    );
   const promises = [
     keepReactingToGtfsrt(
       logger,
@@ -79,7 +85,7 @@ const keepProcessingMessages = async (
       gtfsrtConsumer,
       splitVehiclesAndSend
     ),
-    keepReadingVehicleRegistry(vrReader, updateVehicleRegistry),
+    keepReadingVehicleRegistry(vrReader, updateVehicleRegistryCache),
   ];
   // We expect both promises to stay pending.
   await Promise.any(promises);

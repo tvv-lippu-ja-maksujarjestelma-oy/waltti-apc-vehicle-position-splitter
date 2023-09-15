@@ -46,7 +46,6 @@ export interface PulsarConfig {
   clientConfig: Pulsar.ClientConfig;
   producerConfig: Pulsar.ProducerConfig;
   gtfsrtConsumerConfig: Pulsar.ConsumerConfig;
-  apcConsumerConfig: Pulsar.ConsumerConfig;
   vehicleRegistryReaderConfig: Pulsar.ReaderConfig;
   cacheReaderConfig: Pulsar.ReaderConfig;
 }
@@ -55,10 +54,15 @@ export interface HealthCheckConfig {
   port: number;
 }
 
+export interface CacheRebuildConfig {
+  cacheWindowInSeconds: number;
+}
+
 export interface Config {
   processing: ProcessingConfig;
   pulsar: PulsarConfig;
   healthCheck: HealthCheckConfig;
+  cacheRebuildConfig: CacheRebuildConfig;
 }
 
 const getRequired = (envVariable: string) => {
@@ -96,7 +100,9 @@ const getStringMap = (envVariable: string): Map<string, string> => {
   const map = new Map<string, string>(keyValueList);
   if (map.size < 1) {
     throw new Error(
-      `${envVariable} must have at least one array entry in the form of [string, string].`
+      `${envVariable} must have at least one array entry in the form of [string, string]. Now got ${JSON.stringify(
+        map
+      )}.`
     );
   }
   if (map.size !== keyValueList.length) {
@@ -104,14 +110,14 @@ const getStringMap = (envVariable: string): Map<string, string> => {
   }
   if (
     Array.from(map.values()).some(
-      (pair) => !Array.isArray(pair) || pair.length !== 1
+      (x) => typeof x !== "string" || x.length < 1
     ) ||
-    Array.from(map.entries())
-      .flat(2)
-      .some((x) => typeof x !== "string")
+    Array.from(map.keys()).some((x) => typeof x !== "string" || x.length < 1)
   ) {
     throw new Error(
-      `${envVariable} must contain only strings in the form of [string, string].`
+      `${envVariable} must contain only strings in the form of [string, string]. Now got ${JSON.stringify(
+        map
+      )}.`
     );
   }
   return map;
@@ -178,6 +184,31 @@ const getPulsarCompressionType = (): Pulsar.CompressionType => {
   return compressionType;
 };
 
+const getOptionalFloat = (envVariable: string): number | undefined => {
+  const string = getOptional(envVariable);
+  return string !== undefined ? parseFloat(string) : undefined;
+};
+
+const getOptionalNonNegativeFloat = (
+  envVariable: string
+): number | undefined => {
+  const float = getOptionalFloat(envVariable);
+  if (float != null && (!Number.isFinite(float) || float < 0)) {
+    throw new Error(
+      `${envVariable} must be a non-negative, finite float if given. Instead, ${float} was given.`
+    );
+  }
+  return float;
+};
+
+const getCacheRebuildConfig = () => {
+  const cacheWindowInSeconds =
+    getOptionalNonNegativeFloat("CACHE_WINDOW_IN_SECONDS") ?? 172800;
+  return {
+    cacheWindowInSeconds,
+  };
+};
+
 const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const oauth2Config = getPulsarOauth2Config();
   const serviceUrl = getRequired("PULSAR_SERVICE_URL");
@@ -197,15 +228,13 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   );
   const cacheReaderName = getRequired("PULSAR_CACHE_READER_NAME");
   const cacheReaderStartMessageId = MessageId.earliest();
+  const vehicleReaderTopic = getRequired("PULSAR_VEHICLE_READER_TOPIC");
+  const vehicleReaderName = getRequired("PULSAR_VEHICLE_READER_NAME");
+  const vehicleReaderStartMessageId = MessageId.earliest();
   const gtfsrtSubscription = getRequired("PULSAR_GTFSRT_SUBSCRIPTION");
   const gtfsrtSubscriptionType = "Exclusive";
   const gtfsrtSubscriptionInitialPosition = "Earliest";
-  const apcConsumerTopicsPattern = getRequired(
-    "PULSAR_APC_CONSUMER_TOPICS_PATTERN"
-  );
-  const apcSubscription = getRequired("PULSAR_APC_SUBSCRIPTION");
-  const apcSubscriptionType = "Exclusive";
-  const apcSubscriptionInitialPosition = "Earliest";
+
   return {
     oauth2Config,
     clientConfig: {
@@ -224,22 +253,15 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
       subscriptionType: gtfsrtSubscriptionType,
       subscriptionInitialPosition: gtfsrtSubscriptionInitialPosition,
     },
-    apcConsumerConfig: {
-      topicsPattern: apcConsumerTopicsPattern,
-      subscription: apcSubscription,
-      subscriptionType: apcSubscriptionType,
-      subscriptionInitialPosition: apcSubscriptionInitialPosition,
-    },
-    // TODO: fix these configs
     cacheReaderConfig: {
       topic: producerTopic,
       readerName: cacheReaderName,
       startMessageId: cacheReaderStartMessageId,
     },
     vehicleRegistryReaderConfig: {
-      topic: producerTopic,
-      readerName: "vehicleRegistryReader",
-      startMessageId: cacheReaderStartMessageId,
+      topic: vehicleReaderTopic,
+      readerName: vehicleReaderName,
+      startMessageId: vehicleReaderStartMessageId,
     },
   };
 };
@@ -251,6 +273,7 @@ const getHealthCheckConfig = () => {
 
 export const getConfig = (logger: pino.Logger): Config => ({
   processing: getProcessingConfig(),
+  cacheRebuildConfig: getCacheRebuildConfig(),
   pulsar: getPulsarConfig(logger),
   healthCheck: getHealthCheckConfig(),
 });
