@@ -81,10 +81,10 @@ export const addMessageToCache = (
         );
       }
     } else if (cacheEntry[0] > Number(timestamp)) {
-      logger.error(
+      logger.debug(
         {
-          cacheEntryTimeStamp: new Date(cacheEntry[0]).toString(),
-          messageTimestamp: new Date(Number(timestamp)).toString(),
+          cacheEntryTimeStamp: new Date(cacheEntry[0] * 1000).toString(),
+          messageTimestamp: new Date(Number(timestamp) * 1000).toString(),
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
         },
