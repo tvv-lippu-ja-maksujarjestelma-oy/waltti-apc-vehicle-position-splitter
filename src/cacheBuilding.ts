@@ -234,7 +234,9 @@ export const updateAcceptedVehicles = (
       } else {
         logger.warn(
           {
-            vehicle: JSON.stringify(vehicle),
+            vehicle: VehicleApcMapping.Convert.vehicleApcMappingToJson([
+              vehicle,
+            ]),
             feedPublisherId,
             vrPulsarMessageDataString: dataString,
             eventTimestamp: cacheMessage.getEventTimestamp(),
