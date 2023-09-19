@@ -83,7 +83,6 @@ export const addMessageToCache = (
     } else {
       logger.error(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheEntry: JSON.stringify(cacheEntry),
           timestamp: Number(timestamp),
           eventTimestamp: cacheMessage.getEventTimestamp(),
@@ -119,7 +118,6 @@ export const buildUpCache = async (
       logger.warn(
         {
           err,
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -131,7 +129,6 @@ export const buildUpCache = async (
     if (feedMessage.entity[0] == null) {
       logger.warn(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -149,7 +146,6 @@ export const buildUpCache = async (
     if (feedDetails == null) {
       logger.warn(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -174,7 +170,6 @@ export const buildUpCache = async (
     } else {
       logger.warn(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -201,7 +196,6 @@ export const updateAcceptedVehicles = (
     logger.warn(
       {
         err,
-        vrPulsarMessage: JSON.stringify(cacheMessage),
         vrPulsarMessageDataString: dataString,
         eventTimestamp: cacheMessage.getEventTimestamp(),
         properties: { ...cacheMessage.getProperties() },
@@ -221,7 +215,6 @@ export const updateAcceptedVehicles = (
         {
           pulsarTopic,
           feedMap: [...feedMap.entries()],
-          apcPulsarMessage: JSON.stringify(cacheMessage),
           apcPulsarMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -243,7 +236,6 @@ export const updateAcceptedVehicles = (
           {
             vehicle: JSON.stringify(vehicle),
             feedPublisherId,
-            vrPulsarMessage: JSON.stringify(cacheMessage),
             vrPulsarMessageDataString: dataString,
             eventTimestamp: cacheMessage.getEventTimestamp(),
             properties: { ...cacheMessage.getProperties() },
@@ -262,7 +254,6 @@ export const updateAcceptedVehicles = (
   } else {
     logger.warn(
       {
-        vrPulsarMessage: JSON.stringify(cacheMessage),
         vrPulsarMessageDataString: dataString,
         eventTimestamp: cacheMessage.getEventTimestamp(),
         properties: { ...cacheMessage.getProperties() },
