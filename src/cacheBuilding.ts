@@ -219,6 +219,8 @@ export const updateAcceptedVehicles = (
     if (feedPublisherId == null) {
       logger.warn(
         {
+          pulsarTopic,
+          feedMap: JSON.stringify(feedMap),
           apcPulsarMessage: JSON.stringify(cacheMessage),
           apcPulsarMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
@@ -236,8 +238,37 @@ export const updateAcceptedVehicles = (
       );
       if (uniqueVehicleId != null) {
         acceptedVehicles.add(uniqueVehicleId);
+      } else {
+        logger.warn(
+          {
+            vehicle: JSON.stringify(vehicle),
+            feedPublisherId,
+            vrPulsarMessage: JSON.stringify(cacheMessage),
+            vrPulsarMessageDataString: dataString,
+            eventTimestamp: cacheMessage.getEventTimestamp(),
+            properties: { ...cacheMessage.getProperties() },
+          },
+          "Could not get uniqueVehicleId from the vehicleApcMessage"
+        );
       }
     });
+    logger.debug(
+      {
+        acceptedVehicles: JSON.stringify(acceptedVehicles),
+        eventTimestamp: cacheMessage.getEventTimestamp(),
+      },
+      "Updated accepted vehicles"
+    );
+  } else {
+    logger.warn(
+      {
+        vrPulsarMessage: JSON.stringify(cacheMessage),
+        vrPulsarMessageDataString: dataString,
+        eventTimestamp: cacheMessage.getEventTimestamp(),
+        properties: { ...cacheMessage.getProperties() },
+      },
+      "Could not parse vehicleRegistryMessage"
+    );
   }
 };
 
@@ -253,6 +284,12 @@ export const buildAcceptedVehicles = async (
   logger.info("Building up accepted vehicles");
   await vehicleReader.seekTimestamp(startTime);
   let cacheMessage = await vehicleReader.readNext();
+  // IF there is no message, try bu increasing the start time
+  if (cacheMessage == null) {
+    logger.info("No message found, increasing start time");
+    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 2);
+    cacheMessage = await vehicleReader.readNext();
+  }
   while (vehicleReader.hasNext()) {
     // eslint-disable-next-line no-await-in-loop
     cacheMessage = await vehicleReader.readNext();
