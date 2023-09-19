@@ -31,6 +31,19 @@ export const splitVehicles = (
   vehiclesInMessage: Set<UniqueVehicleId>,
   gtfsrtPulsarMessage: Pulsar.Message
 ): void => {
+  if (acceptedVehicles.size === 0) {
+    logger.warn(
+      {
+        feedPublisherId,
+        feedEntity: JSON.stringify(gtfsrtMessage),
+        eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+        properties: gtfsrtPulsarMessage.getProperties(),
+      },
+      "No accepted vehicles"
+    );
+    return;
+  }
+
   gtfsrtMessage.entity.forEach((entity) => {
     const uniqueVehicleId = getUniqueVehicleId(entity, feedPublisherId);
     if (uniqueVehicleId == null) {
@@ -114,6 +127,18 @@ export const sendNotServicingMessages = (
   originMessageId: string,
   sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
 ): void => {
+  if (vehicleStateCache.size === 0) {
+    logger.debug(
+      {
+        vehicleStateCache: JSON.stringify(vehicleStateCache),
+        vehiclesInMessage: JSON.stringify(vehiclesInMessage),
+        mainHeader: JSON.stringify(mainHeader),
+        originMessageId,
+      },
+      "No vehicles in message"
+    );
+    return;
+  }
   vehicleStateCache.forEach((value, key) => {
     if (value[1] && !vehiclesInMessage.has(key)) {
       vehicleStateCache.set(key, [value[0], false]);
@@ -187,18 +212,18 @@ export const initializeSplitting = async (
   const acceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
   logger.info("Initializing splitting");
 
-  await buildUpCache(
-    logger,
-    vehicleStateCache,
-    cacheReader,
-    cacheWindowInSeconds,
-    feedMap
-  );
-
   await buildAcceptedVehicles(
     logger,
     acceptedVehicles,
     vehicleReader,
+    cacheWindowInSeconds,
+    feedMap
+  );
+
+  await buildUpCache(
+    logger,
+    vehicleStateCache,
+    cacheReader,
     cacheWindowInSeconds,
     feedMap
   );
@@ -234,9 +259,10 @@ export const initializeSplitting = async (
       logger.warn(
         {
           pulsarTopic,
+          feedMap: [...feedMap.entries()],
           gtfsrtMessage: JSON.stringify(gtfsrtMessage),
           eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-          properties: gtfsrtPulsarMessage.getProperties(),
+          properties: { ...gtfsrtPulsarMessage.getProperties() },
         },
         "Could not get feed details from the Pulsar topic name"
       );
@@ -244,7 +270,13 @@ export const initializeSplitting = async (
     }
 
     logger.debug(
-      { nEntity: gtfsrtMessage.entity.length },
+      {
+        pulsarTopic,
+        gtfsrtMessage: JSON.stringify(gtfsrtMessage),
+        eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+        properties: gtfsrtPulsarMessage.getProperties(),
+        nEntity: gtfsrtMessage.entity.length,
+      },
       "Handle each GTFS Realtime entity"
     );
 

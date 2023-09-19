@@ -83,7 +83,6 @@ export const addMessageToCache = (
     } else {
       logger.error(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheEntry: JSON.stringify(cacheEntry),
           timestamp: Number(timestamp),
           eventTimestamp: cacheMessage.getEventTimestamp(),
@@ -119,7 +118,6 @@ export const buildUpCache = async (
       logger.warn(
         {
           err,
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -131,7 +129,6 @@ export const buildUpCache = async (
     if (feedMessage.entity[0] == null) {
       logger.warn(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -149,7 +146,6 @@ export const buildUpCache = async (
     if (feedDetails == null) {
       logger.warn(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -174,7 +170,6 @@ export const buildUpCache = async (
     } else {
       logger.warn(
         {
-          cacheMessage: JSON.stringify(cacheMessage),
           cacheMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -201,7 +196,6 @@ export const updateAcceptedVehicles = (
     logger.warn(
       {
         err,
-        vrPulsarMessage: JSON.stringify(cacheMessage),
         vrPulsarMessageDataString: dataString,
         eventTimestamp: cacheMessage.getEventTimestamp(),
         properties: { ...cacheMessage.getProperties() },
@@ -219,7 +213,8 @@ export const updateAcceptedVehicles = (
     if (feedPublisherId == null) {
       logger.warn(
         {
-          apcPulsarMessage: JSON.stringify(cacheMessage),
+          pulsarTopic,
+          feedMap: [...feedMap.entries()],
           apcPulsarMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
@@ -236,8 +231,37 @@ export const updateAcceptedVehicles = (
       );
       if (uniqueVehicleId != null) {
         acceptedVehicles.add(uniqueVehicleId);
+      } else {
+        logger.warn(
+          {
+            vehicle: VehicleApcMapping.Convert.vehicleApcMappingToJson([
+              vehicle,
+            ]),
+            feedPublisherId,
+            vrPulsarMessageDataString: dataString,
+            eventTimestamp: cacheMessage.getEventTimestamp(),
+            properties: { ...cacheMessage.getProperties() },
+          },
+          "Could not get uniqueVehicleId from the vehicleApcMessage"
+        );
       }
     });
+    logger.debug(
+      {
+        acceptedVehicles: Array.from(acceptedVehicles.values()),
+        eventTimestamp: cacheMessage.getEventTimestamp(),
+      },
+      "Updated accepted vehicles"
+    );
+  } else {
+    logger.warn(
+      {
+        vrPulsarMessageDataString: dataString,
+        eventTimestamp: cacheMessage.getEventTimestamp(),
+        properties: { ...cacheMessage.getProperties() },
+      },
+      "Could not parse vehicleRegistryMessage"
+    );
   }
 };
 
@@ -253,6 +277,12 @@ export const buildAcceptedVehicles = async (
   logger.info("Building up accepted vehicles");
   await vehicleReader.seekTimestamp(startTime);
   let cacheMessage = await vehicleReader.readNext();
+  // IF there is no message, try bu increasing the start time
+  if (cacheMessage == null) {
+    logger.info("No message found, increasing start time");
+    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
+    cacheMessage = await vehicleReader.readNext();
+  }
   while (vehicleReader.hasNext()) {
     // eslint-disable-next-line no-await-in-loop
     cacheMessage = await vehicleReader.readNext();
