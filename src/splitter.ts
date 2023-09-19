@@ -127,7 +127,7 @@ export const sendNotServicingMessages = (
   originMessageId: string,
   sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
 ): void => {
-  if (vehiclesInMessage.size === 0) {
+  if (vehicleStateCache.size === 0) {
     logger.debug(
       {
         vehicleStateCache: JSON.stringify(vehicleStateCache),
