@@ -259,7 +259,7 @@ export const initializeSplitting = async (
       logger.warn(
         {
           pulsarTopic,
-          feedMap: JSON.stringify(feedMap),
+          feedMap: [...feedMap.entries()],
           gtfsrtMessage: JSON.stringify(gtfsrtMessage),
           eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
           properties: { ...gtfsrtPulsarMessage.getProperties() },

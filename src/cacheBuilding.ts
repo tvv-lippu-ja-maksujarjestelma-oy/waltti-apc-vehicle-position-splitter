@@ -220,7 +220,8 @@ export const updateAcceptedVehicles = (
       logger.warn(
         {
           pulsarTopic,
-          feedMap: JSON.stringify(feedMap),
+          feedMapKeys: JSON.stringify(feedMap.keys()),
+          feedMapValues: JSON.stringify(feedMap.values()),
           apcPulsarMessage: JSON.stringify(cacheMessage),
           apcPulsarMessageDataString: dataString,
           eventTimestamp: cacheMessage.getEventTimestamp(),
