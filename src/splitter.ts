@@ -135,7 +135,7 @@ export const sendNotServicingMessages = (
         mainHeader: JSON.stringify(mainHeader),
         originMessageId,
       },
-      "No vehicles in message"
+      "No vehicles in cache"
     );
     return;
   }
