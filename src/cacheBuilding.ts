@@ -248,7 +248,7 @@ export const updateAcceptedVehicles = (
     });
     logger.debug(
       {
-        acceptedVehicles: JSON.stringify(acceptedVehicles),
+        acceptedVehicles: Array.from(acceptedVehicles.values()),
         eventTimestamp: cacheMessage.getEventTimestamp(),
       },
       "Updated accepted vehicles"
