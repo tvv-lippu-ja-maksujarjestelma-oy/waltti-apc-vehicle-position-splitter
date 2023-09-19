@@ -68,7 +68,7 @@ export const addMessageToCache = (
     if (cacheEntry[0] < Number(timestamp)) {
       cache.set(uniqueVehicleId, [Number(timestamp), !notServicing]);
       if (cacheEntry[1] !== notServicing) {
-        logger.info(
+        logger.debug(
           {
             uniqueVehicleId,
             cacheEntry: JSON.stringify(cacheEntry),
