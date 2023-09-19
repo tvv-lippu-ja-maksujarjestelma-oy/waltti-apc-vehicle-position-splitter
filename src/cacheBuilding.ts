@@ -280,7 +280,7 @@ export const buildAcceptedVehicles = async (
   // IF there is no message, try bu increasing the start time
   if (cacheMessage == null) {
     logger.info("No message found, increasing start time");
-    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 2);
+    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
     cacheMessage = await vehicleReader.readNext();
   }
   while (vehicleReader.hasNext()) {
