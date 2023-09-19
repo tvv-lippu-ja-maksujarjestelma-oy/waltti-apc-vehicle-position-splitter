@@ -80,11 +80,11 @@ export const addMessageToCache = (
           `Vehicle has changed servicing status to ${!notServicing}`
         );
       }
-    } else {
-      logger.error(
+    } else if (cacheEntry[0] > Number(timestamp)) {
+      logger.debug(
         {
-          cacheEntry: JSON.stringify(cacheEntry),
-          timestamp: Number(timestamp),
+          cacheEntryTimeStamp: new Date(cacheEntry[0] * 1000).toString(),
+          messageTimestamp: new Date(Number(timestamp) * 1000).toString(),
           eventTimestamp: cacheMessage.getEventTimestamp(),
           properties: { ...cacheMessage.getProperties() },
         },
