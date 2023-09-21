@@ -229,7 +229,12 @@ export const updateAcceptedVehicles = (
         vehicle,
         feedPublisherId
       );
-      if (uniqueVehicleId != null) {
+      if (
+        vehicle.equipment.some(
+          (equipmentItem) => equipmentItem.type === "PASSENGER_COUNTER"
+        ) &&
+        uniqueVehicleId != null
+      ) {
         acceptedVehicles.add(uniqueVehicleId);
       } else {
         logger.warn(
