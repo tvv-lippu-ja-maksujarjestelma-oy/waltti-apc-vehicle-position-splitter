@@ -236,7 +236,7 @@ export const updateAcceptedVehicles = (
         uniqueVehicleId != null
       ) {
         acceptedVehicles.add(uniqueVehicleId);
-      } else {
+      } else if (uniqueVehicleId == null) {
         logger.warn(
           {
             vehicle: VehicleApcMapping.Convert.vehicleApcMappingToJson([
