@@ -35,9 +35,9 @@ export const splitVehicles = (
     logger.warn(
       {
         feedPublisherId,
-        feedEntity: JSON.stringify(gtfsrtMessage),
+        originMessageId,
+        vehiclesInMessage: Array.from(vehiclesInMessage.values()),
         eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-        properties: gtfsrtPulsarMessage.getProperties(),
       },
       "No accepted vehicles"
     );
