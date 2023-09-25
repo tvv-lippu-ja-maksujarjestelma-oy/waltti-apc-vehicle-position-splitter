@@ -234,7 +234,8 @@ export const initializeSplitting = async (
 
   const splitVehiclesAndSend = (
     gtfsrtPulsarMessage: Pulsar.Message,
-    sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
+    sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void,
+    acknowledgeMessage: () => void
   ): void => {
     const vehiclesInMessage: Set<UniqueVehicleId> = new Set<UniqueVehicleId>();
     let gtfsrtMessage;
@@ -302,6 +303,7 @@ export const initializeSplitting = async (
       originMessageId.toString(),
       sendCallback
     );
+    acknowledgeMessage();
   };
 
   return {
