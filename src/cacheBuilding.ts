@@ -187,6 +187,7 @@ export const updateAcceptedVehicles = (
   acceptedVehicles: AcceptedVehicles
 ): void => {
   const dataString = cacheMessage.getData().toString("utf8");
+  const oldAcceptedVehicles = new Set(acceptedVehicles);
   logger.info("Updating accepted vehicles");
   let vehicleApcMessage;
   try {
@@ -236,6 +237,18 @@ export const updateAcceptedVehicles = (
         uniqueVehicleId != null
       ) {
         acceptedVehicles.add(uniqueVehicleId);
+        logger.debug(
+          {
+            vehicle: VehicleApcMapping.Convert.vehicleApcMappingToJson([
+              vehicle,
+            ]),
+            feedPublisherId,
+            vrPulsarMessageDataString: dataString,
+            eventTimestamp: cacheMessage.getEventTimestamp(),
+            properties: { ...cacheMessage.getProperties() },
+          },
+          "Added vehicle to accepted vehicles"
+        );
       } else if (uniqueVehicleId == null) {
         logger.warn(
           {
@@ -251,13 +264,26 @@ export const updateAcceptedVehicles = (
         );
       }
     });
-    logger.debug(
-      {
-        acceptedVehicles: Array.from(acceptedVehicles.values()),
-        eventTimestamp: cacheMessage.getEventTimestamp(),
-      },
-      "Updated accepted vehicles"
-    );
+
+    if (acceptedVehicles.size === 0) {
+      logger.warn(
+        {
+          acceptedVehicles: Array.from(acceptedVehicles.values()),
+          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          eventTimestamp: cacheMessage.getEventTimestamp(),
+        },
+        "No accepted vehicles"
+      );
+    } else {
+      logger.debug(
+        {
+          acceptedVehicles: Array.from(acceptedVehicles.values()),
+          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          eventTimestamp: cacheMessage.getEventTimestamp(),
+        },
+        "Updated accepted vehicles"
+      );
+    }
   } else {
     logger.warn(
       {
