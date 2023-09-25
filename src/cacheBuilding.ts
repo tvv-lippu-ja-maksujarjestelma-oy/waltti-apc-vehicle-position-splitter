@@ -178,6 +178,14 @@ export const buildUpCache = async (
       );
     }
   }
+  logger.info(
+    {
+      cacheSize: cache.size,
+      eventTimestamp: Date.now(),
+      feedmap: [...feedmap.entries()],
+    },
+    "Finished building up cache"
+  );
 };
 
 export const updateAcceptedVehicles = (
