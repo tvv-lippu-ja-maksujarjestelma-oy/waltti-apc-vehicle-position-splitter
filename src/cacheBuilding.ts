@@ -107,6 +107,10 @@ export const buildUpCache = async (
   const startTime = now - cacheWindowInSeconds * 1000;
   await cacheReader.seekTimestamp(startTime);
   logger.info("Building up cache");
+  if (!cacheReader.hasNext()) {
+    logger.info("No message found, increasing start time");
+    await cacheReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 2);
+  }
   while (cacheReader.hasNext()) {
     // eslint-disable-next-line no-await-in-loop
     const cacheMessage = await cacheReader.readNext();

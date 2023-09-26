@@ -9,7 +9,9 @@ const keepReactingToGtfsrt = async (
   gtfsrtConsumer: Pulsar.Consumer,
   splitVehiclesAndSend: (
     gtfsrtMessage: Pulsar.Message,
-    sendCallback: (splittedVehicleMessage: Pulsar.ProducerMessage) => void,
+    sendCallback: (
+      splittedVehicleMessage: Pulsar.ProducerMessage
+    ) => Promise<Pulsar.MessageId>,
     acknowledgeMessage: () => void
   ) => void
 ) => {
@@ -32,8 +34,7 @@ const keepReactingToGtfsrt = async (
       (splittedVehicle) => {
         logger.debug("Sending splitter VP message");
         // In case of an error, exit via the listener on unhandledRejection.
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        producer.send(splittedVehicle);
+        return producer.send(splittedVehicle);
       },
       () => {
         logger.debug(
