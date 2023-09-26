@@ -24,8 +24,7 @@ const keepReactingToGtfsrt = async (
         topic: gtfsrtPulsarMessage.getTopicName(),
         eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
         messageId: gtfsrtPulsarMessage.getMessageId().toString(),
-        // Logging does not work for properties
-        properties: gtfsrtPulsarMessage.getProperties(),
+        properties: { ...gtfsrtPulsarMessage.getProperties() },
       },
       "Received gtfsrtPulsarMessage"
     );
@@ -42,7 +41,7 @@ const keepReactingToGtfsrt = async (
             topic: gtfsrtPulsarMessage.getTopicName(),
             eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
             messageId: gtfsrtPulsarMessage.getMessageId().toString(),
-            properties: gtfsrtPulsarMessage.getProperties(),
+            properties: { ...gtfsrtPulsarMessage.getProperties() },
           },
           "Ack gtfsrtPulsarMessage"
         );

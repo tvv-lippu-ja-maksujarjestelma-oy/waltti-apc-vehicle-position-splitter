@@ -55,7 +55,7 @@ export const splitVehicles = (
           feedPublisherId,
           feedEntity: JSON.stringify(entity),
           eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-          properties: gtfsrtPulsarMessage.getProperties(),
+          properties: { ...gtfsrtPulsarMessage.getProperties() },
         },
         "Could not get uniqueVehicleId from the GTFS Realtime entity"
       );
@@ -83,7 +83,7 @@ export const splitVehicles = (
             mainHeader,
             feedEntity: JSON.stringify(entity),
             eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-            properties: gtfsrtPulsarMessage.getProperties(),
+            properties: { ...gtfsrtPulsarMessage.getProperties() },
           },
           "Could not get header from the GTFS Realtime message"
         );
@@ -286,7 +286,7 @@ export const initializeSplitting = async (
         pulsarTopic,
         gtfsrtMessage: JSON.stringify(gtfsrtMessage),
         eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-        properties: gtfsrtPulsarMessage.getProperties(),
+        properties: { ...gtfsrtPulsarMessage.getProperties() },
         nEntity: gtfsrtMessage.entity.length,
       },
       "Handle each GTFS Realtime entity"
