@@ -205,6 +205,7 @@ export const buildUpCache = async (
     );
   }
   logger.info({ cacheSize: cache.size }, "Cache built");
+  await cacheReader.close();
 };
 
 export const updateAcceptedVehicles = (
@@ -360,4 +361,5 @@ export const buildAcceptedVehicles = async (
     cacheMessage = await vehicleReader.readNext();
   }
   updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
+  await vehicleReader.close();
 };
