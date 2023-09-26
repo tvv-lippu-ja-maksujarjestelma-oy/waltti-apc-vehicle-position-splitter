@@ -215,7 +215,11 @@ export const updateAcceptedVehicles = (
 ): void => {
   const dataString = cacheMessage.getData().toString("utf8");
   const oldAcceptedVehicles = new Set(acceptedVehicles);
-  logger.info("Updating accepted vehicles");
+  logger.info(
+    { messageID: cacheMessage.getMessageId().toString() },
+    "Updating accepted vehicles"
+  );
+
   let splittedVehicleMessage;
   try {
     splittedVehicleMessage =
@@ -233,6 +237,16 @@ export const updateAcceptedVehicles = (
   }
   // Update acceptedVehicles
   if (splittedVehicleMessage != null) {
+    logger.debug(
+      {
+        splittedVehicleMessage:
+          VehicleApcMapping.Convert.vehicleApcMappingToJson(
+            splittedVehicleMessage
+          ),
+        eventTimestamp: cacheMessage.getEventTimestamp(),
+      },
+      "Parsed vehicleRegistryMessage"
+    );
     const pulsarTopic = cacheMessage.getTopicName();
     const feedPublisherId = getFeedDetails(
       feedMap,
