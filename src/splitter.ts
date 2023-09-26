@@ -338,7 +338,7 @@ export const initializeSplitting = async (
           { originMessageId, pulsarTopic, promises },
           "Some messages were not sent"
         );
-        process.exit(143);
+        throw new Error("Some messages were not sent");
       });
   };
 
