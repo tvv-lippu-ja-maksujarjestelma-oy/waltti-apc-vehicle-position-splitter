@@ -233,7 +233,6 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const vehicleReaderStartMessageId = MessageId.earliest();
   const gtfsrtSubscription = getRequired("PULSAR_GTFSRT_SUBSCRIPTION");
   const gtfsrtSubscriptionType = "Exclusive";
-  const gtfsrtSubscriptionInitialPosition = "Earliest";
 
   return {
     oauth2Config,
@@ -251,7 +250,6 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
       topicsPattern: gtfsrtConsumerTopicsPattern,
       subscription: gtfsrtSubscription,
       subscriptionType: gtfsrtSubscriptionType,
-      subscriptionInitialPosition: gtfsrtSubscriptionInitialPosition,
     },
     cacheReaderConfig: {
       topic: producerTopic,
