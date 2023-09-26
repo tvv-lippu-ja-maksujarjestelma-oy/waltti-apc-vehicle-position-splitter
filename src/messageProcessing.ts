@@ -9,7 +9,10 @@ const keepReactingToGtfsrt = async (
   gtfsrtConsumer: Pulsar.Consumer,
   splitVehiclesAndSend: (
     gtfsrtMessage: Pulsar.Message,
-    sendCallback: (splittedVehicleMessage: Pulsar.ProducerMessage) => void
+    sendCallback: (
+      splittedVehicleMessage: Pulsar.ProducerMessage
+    ) => Promise<Pulsar.MessageId>,
+    acknowledgeMessage: () => void
   ) => void
 ) => {
   // Errors are handled in the calling function.
@@ -26,26 +29,29 @@ const keepReactingToGtfsrt = async (
       },
       "Received gtfsrtPulsarMessage"
     );
-    splitVehiclesAndSend(gtfsrtPulsarMessage, (splittedVehicle) => {
-      logger.debug("Sending splitter VP message");
-      // In case of an error, exit via the listener on unhandledRejection.
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      producer.send(splittedVehicle);
-    });
-    logger.debug(
-      {
-        topic: gtfsrtPulsarMessage.getTopicName(),
-        eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-        messageId: gtfsrtPulsarMessage.getMessageId().toString(),
-        properties: gtfsrtPulsarMessage.getProperties(),
+    splitVehiclesAndSend(
+      gtfsrtPulsarMessage,
+      (splittedVehicle) => {
+        logger.debug("Sending splitter VP message");
+        // In case of an error, exit via the listener on unhandledRejection.
+        return producer.send(splittedVehicle);
       },
-      "Ack gtfsrtPulsarMessage"
+      () => {
+        logger.debug(
+          {
+            topic: gtfsrtPulsarMessage.getTopicName(),
+            eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+            messageId: gtfsrtPulsarMessage.getMessageId().toString(),
+            properties: gtfsrtPulsarMessage.getProperties(),
+          },
+          "Ack gtfsrtPulsarMessage"
+        );
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        gtfsrtConsumer.acknowledge(gtfsrtPulsarMessage);
+      }
     );
-    // In case of an error, exit via the listener on unhandledRejection.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    gtfsrtConsumer.acknowledge(gtfsrtPulsarMessage);
   }
-  /* eslint-enable no-await-in-loop */
+  // In case of an error, exit via the listener on unhandledRejection.
 };
 
 const keepReadingVehicleRegistry = async (
@@ -53,7 +59,6 @@ const keepReadingVehicleRegistry = async (
   updateVehicleRegistryCache: (apcMessage: Pulsar.Message) => void
 ): Promise<void> => {
   // Errors are handled on the main level.
-  /* eslint-disable no-await-in-loop */
   for (;;) {
     const vrMessage = await vrReader.readNext();
     updateVehicleRegistryCache(vrMessage);
