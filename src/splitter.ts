@@ -27,17 +27,20 @@ export const splitVehicles = (
   vehicleStateCache: VehicleStateCache,
   mainHeader: transit_realtime.IFeedHeader,
   originMessageId: string,
-  sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void,
+  sendCallback: (
+    splittedVehicleMessage: Pulsar.ProducerMessage
+  ) => Promise<Pulsar.MessageId>,
   vehiclesInMessage: Set<UniqueVehicleId>,
-  gtfsrtPulsarMessage: Pulsar.Message
+  gtfsrtPulsarMessage: Pulsar.Message,
+  promises: Promise<Pulsar.MessageId>[]
 ): void => {
   if (acceptedVehicles.size === 0) {
     logger.warn(
       {
         feedPublisherId,
-        feedEntity: JSON.stringify(gtfsrtMessage),
+        originMessageId,
+        vehiclesInMessage: Array.from(vehiclesInMessage.values()),
         eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-        properties: gtfsrtPulsarMessage.getProperties(),
       },
       "No accepted vehicles"
     );
@@ -52,7 +55,7 @@ export const splitVehicles = (
           feedPublisherId,
           feedEntity: JSON.stringify(entity),
           eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-          properties: gtfsrtPulsarMessage.getProperties(),
+          properties: { ...gtfsrtPulsarMessage.getProperties() },
         },
         "Could not get uniqueVehicleId from the GTFS Realtime entity"
       );
@@ -80,7 +83,7 @@ export const splitVehicles = (
             mainHeader,
             feedEntity: JSON.stringify(entity),
             eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-            properties: gtfsrtPulsarMessage.getProperties(),
+            properties: { ...gtfsrtPulsarMessage.getProperties() },
           },
           "Could not get header from the GTFS Realtime message"
         );
@@ -114,7 +117,8 @@ export const splitVehicles = (
         timestamp
       );
       vehiclesInMessage.add(uniqueVehicleId);
-      sendCallback(pulsarMessage);
+      const promise = sendCallback(pulsarMessage);
+      promises.push(promise);
     }
   });
 };
@@ -125,7 +129,10 @@ export const sendNotServicingMessages = (
   vehiclesInMessage: AcceptedVehicles,
   mainHeader: transit_realtime.IFeedHeader,
   originMessageId: string,
-  sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
+  sendCallback: (
+    splittedVehicleMessage: Pulsar.ProducerMessage
+  ) => Promise<Pulsar.MessageId>,
+  promises: Promise<Pulsar.MessageId>[]
 ): void => {
   if (vehicleStateCache.size === 0) {
     logger.debug(
@@ -193,7 +200,8 @@ export const sendNotServicingMessages = (
           isServicing: "false",
         },
       };
-      sendCallback(pulsarMessage);
+      const promise = sendCallback(pulsarMessage);
+      promises.push(promise);
     }
   });
 };
@@ -234,8 +242,12 @@ export const initializeSplitting = async (
 
   const splitVehiclesAndSend = (
     gtfsrtPulsarMessage: Pulsar.Message,
-    sendCallback: (fullApcMessage: Pulsar.ProducerMessage) => void
+    sendCallback: (
+      splittedVehicleMessage: Pulsar.ProducerMessage
+    ) => Promise<Pulsar.MessageId>,
+    acknowledgeMessage: () => void
   ): void => {
+    const promises: Promise<Pulsar.MessageId>[] = [];
     const vehiclesInMessage: Set<UniqueVehicleId> = new Set<UniqueVehicleId>();
     let gtfsrtMessage;
     try {
@@ -274,7 +286,7 @@ export const initializeSplitting = async (
         pulsarTopic,
         gtfsrtMessage: JSON.stringify(gtfsrtMessage),
         eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-        properties: gtfsrtPulsarMessage.getProperties(),
+        properties: { ...gtfsrtPulsarMessage.getProperties() },
         nEntity: gtfsrtMessage.entity.length,
       },
       "Handle each GTFS Realtime entity"
@@ -290,7 +302,8 @@ export const initializeSplitting = async (
       originMessageId.toString(),
       sendCallback,
       vehiclesInMessage,
-      gtfsrtPulsarMessage
+      gtfsrtPulsarMessage,
+      promises
     );
 
     // Loop through the cache and set vehicles that have not been seen in the message to false
@@ -300,8 +313,33 @@ export const initializeSplitting = async (
       vehiclesInMessage,
       mainHeader,
       originMessageId.toString(),
-      sendCallback
+      sendCallback,
+      promises
     );
+    Promise.all(promises)
+      .then((results) => {
+        if (
+          results.some(
+            (result: Pulsar.MessageId) => result.toString() === undefined
+          )
+        ) {
+          const messageIds = results.map((result) => result.toString());
+          logger.fatal(
+            { results, messageIds, originMessageId, pulsarTopic },
+            "Some messages were not sent"
+          );
+          throw new Error("Some messages were not sent");
+        } else {
+          acknowledgeMessage();
+        }
+      })
+      .catch(() => {
+        logger.fatal(
+          { originMessageId, pulsarTopic, promises },
+          "Some messages were not sent"
+        );
+        throw new Error("Some messages were not sent");
+      });
   };
 
   return {

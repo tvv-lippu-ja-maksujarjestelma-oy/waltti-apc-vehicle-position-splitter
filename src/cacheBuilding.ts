@@ -107,6 +107,10 @@ export const buildUpCache = async (
   const startTime = now - cacheWindowInSeconds * 1000;
   await cacheReader.seekTimestamp(startTime);
   logger.info("Building up cache");
+  if (!cacheReader.hasNext()) {
+    logger.info("No message found, increasing start time");
+    await cacheReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 2);
+  }
   while (cacheReader.hasNext()) {
     // eslint-disable-next-line no-await-in-loop
     const cacheMessage = await cacheReader.readNext();
@@ -178,6 +182,14 @@ export const buildUpCache = async (
       );
     }
   }
+  logger.info(
+    {
+      cacheSize: cache.size,
+      eventTimestamp: Date.now(),
+      feedmap: [...feedmap.entries()],
+    },
+    "Finished building up cache"
+  );
 };
 
 export const updateAcceptedVehicles = (
@@ -187,10 +199,11 @@ export const updateAcceptedVehicles = (
   acceptedVehicles: AcceptedVehicles
 ): void => {
   const dataString = cacheMessage.getData().toString("utf8");
+  const oldAcceptedVehicles = new Set(acceptedVehicles);
   logger.info("Updating accepted vehicles");
-  let vehicleApcMessage;
+  let splittedVehicleMessage;
   try {
-    vehicleApcMessage =
+    splittedVehicleMessage =
       VehicleApcMapping.Convert.toVehicleApcMapping(dataString);
   } catch (err) {
     logger.warn(
@@ -204,7 +217,7 @@ export const updateAcceptedVehicles = (
     );
   }
   // Update acceptedVehicles
-  if (vehicleApcMessage != null) {
+  if (splittedVehicleMessage != null) {
     const pulsarTopic = cacheMessage.getTopicName();
     const feedPublisherId = getFeedDetails(
       feedMap,
@@ -224,7 +237,7 @@ export const updateAcceptedVehicles = (
       return;
     }
     acceptedVehicles.clear();
-    vehicleApcMessage.forEach((vehicle) => {
+    splittedVehicleMessage.forEach((vehicle) => {
       const uniqueVehicleId = getUniqueVehicleIdFromVehicleApcMapping(
         vehicle,
         feedPublisherId
@@ -236,7 +249,19 @@ export const updateAcceptedVehicles = (
         uniqueVehicleId != null
       ) {
         acceptedVehicles.add(uniqueVehicleId);
-      } else {
+        logger.debug(
+          {
+            vehicle: VehicleApcMapping.Convert.vehicleApcMappingToJson([
+              vehicle,
+            ]),
+            feedPublisherId,
+            vrPulsarMessageDataString: dataString,
+            eventTimestamp: cacheMessage.getEventTimestamp(),
+            properties: { ...cacheMessage.getProperties() },
+          },
+          "Added vehicle to accepted vehicles"
+        );
+      } else if (uniqueVehicleId == null) {
         logger.warn(
           {
             vehicle: VehicleApcMapping.Convert.vehicleApcMappingToJson([
@@ -247,17 +272,30 @@ export const updateAcceptedVehicles = (
             eventTimestamp: cacheMessage.getEventTimestamp(),
             properties: { ...cacheMessage.getProperties() },
           },
-          "Could not get uniqueVehicleId from the vehicleApcMessage"
+          "Could not get uniqueVehicleId from the splittedVehicleMessage"
         );
       }
     });
-    logger.debug(
-      {
-        acceptedVehicles: Array.from(acceptedVehicles.values()),
-        eventTimestamp: cacheMessage.getEventTimestamp(),
-      },
-      "Updated accepted vehicles"
-    );
+
+    if (acceptedVehicles.size === 0) {
+      logger.warn(
+        {
+          acceptedVehicles: Array.from(acceptedVehicles.values()),
+          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          eventTimestamp: cacheMessage.getEventTimestamp(),
+        },
+        "No accepted vehicles"
+      );
+    } else {
+      logger.debug(
+        {
+          acceptedVehicles: Array.from(acceptedVehicles.values()),
+          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          eventTimestamp: cacheMessage.getEventTimestamp(),
+        },
+        "Updated accepted vehicles"
+      );
+    }
   } else {
     logger.warn(
       {
