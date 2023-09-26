@@ -201,9 +201,9 @@ export const updateAcceptedVehicles = (
   const dataString = cacheMessage.getData().toString("utf8");
   const oldAcceptedVehicles = new Set(acceptedVehicles);
   logger.info("Updating accepted vehicles");
-  let vehicleApcMessage;
+  let splittedVehicleMessage;
   try {
-    vehicleApcMessage =
+    splittedVehicleMessage =
       VehicleApcMapping.Convert.toVehicleApcMapping(dataString);
   } catch (err) {
     logger.warn(
@@ -217,7 +217,7 @@ export const updateAcceptedVehicles = (
     );
   }
   // Update acceptedVehicles
-  if (vehicleApcMessage != null) {
+  if (splittedVehicleMessage != null) {
     const pulsarTopic = cacheMessage.getTopicName();
     const feedPublisherId = getFeedDetails(
       feedMap,
@@ -237,7 +237,7 @@ export const updateAcceptedVehicles = (
       return;
     }
     acceptedVehicles.clear();
-    vehicleApcMessage.forEach((vehicle) => {
+    splittedVehicleMessage.forEach((vehicle) => {
       const uniqueVehicleId = getUniqueVehicleIdFromVehicleApcMapping(
         vehicle,
         feedPublisherId
@@ -272,7 +272,7 @@ export const updateAcceptedVehicles = (
             eventTimestamp: cacheMessage.getEventTimestamp(),
             properties: { ...cacheMessage.getProperties() },
           },
-          "Could not get uniqueVehicleId from the vehicleApcMessage"
+          "Could not get uniqueVehicleId from the splittedVehicleMessage"
         );
       }
     });

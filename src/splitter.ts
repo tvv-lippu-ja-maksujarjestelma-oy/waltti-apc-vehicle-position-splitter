@@ -28,7 +28,7 @@ export const splitVehicles = (
   mainHeader: transit_realtime.IFeedHeader,
   originMessageId: string,
   sendCallback: (
-    fullApcMessage: Pulsar.ProducerMessage
+    splittedVehicleMessage: Pulsar.ProducerMessage
   ) => Promise<Pulsar.MessageId>,
   vehiclesInMessage: Set<UniqueVehicleId>,
   gtfsrtPulsarMessage: Pulsar.Message,
@@ -130,7 +130,7 @@ export const sendNotServicingMessages = (
   mainHeader: transit_realtime.IFeedHeader,
   originMessageId: string,
   sendCallback: (
-    fullApcMessage: Pulsar.ProducerMessage
+    splittedVehicleMessage: Pulsar.ProducerMessage
   ) => Promise<Pulsar.MessageId>,
   promises: Promise<Pulsar.MessageId>[]
 ): void => {
@@ -243,7 +243,7 @@ export const initializeSplitting = async (
   const splitVehiclesAndSend = (
     gtfsrtPulsarMessage: Pulsar.Message,
     sendCallback: (
-      fullApcMessage: Pulsar.ProducerMessage
+      splittedVehicleMessage: Pulsar.ProducerMessage
     ) => Promise<Pulsar.MessageId>,
     acknowledgeMessage: () => void
   ): void => {
