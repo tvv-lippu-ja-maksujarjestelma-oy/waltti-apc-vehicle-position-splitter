@@ -66,7 +66,7 @@ test("Testing splitvehicles with one vehicle in message", () => {
     timestamp: 0,
   };
   const originMessageId = "123";
-  const sendCallback = () => {};
+  const sendCallback = jest.fn();
   const vehiclesInMessage: AcceptedVehicles = new Set<UniqueVehicleId>();
   AcceptedVehicles.add("fi:kuopio:44517_160");
   const gtfsrtMessage: transit_realtime.FeedMessage =
@@ -116,6 +116,7 @@ test("Testing splitvehicles with one vehicle in message", () => {
     buffer: Buffer.from(""),
     eventTimestamp: 0,
   });
+  const promises: Promise<Pulsar.MessageId>[] = [];
   splitVehicles(
     logger,
     gtfsrtMessage,
@@ -126,8 +127,15 @@ test("Testing splitvehicles with one vehicle in message", () => {
     originMessageId,
     sendCallback,
     vehiclesInMessage,
-    pulsarMessage
+    pulsarMessage,
+    promises
   );
+  expect(promises.length).toBe(1);
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises, jest/valid-expect
+  expect(Promise.allSettled(promises)).resolves.toEqual([
+    { status: "fulfilled", value: undefined },
+  ]);
+  expect(sendCallback).toHaveBeenCalledTimes(1);
   expect(vehiclesInMessage.size).toBe(1);
   expect(vehiclesInMessage.has("fi:kuopio:44517_160")).toBe(true);
   expect(VehicleStateCache.get("fi:kuopio:44517_160")).toEqual([
@@ -159,7 +167,7 @@ test("Testing splitvehicles with multiple vehicles in message", () => {
     timestamp: 0,
   };
   const originMessageId = "123";
-  const sendCallback = () => {};
+  const sendCallback = jest.fn();
   const vehiclesInMessage: AcceptedVehicles = new Set<UniqueVehicleId>();
   AcceptedVehicles.add("fi:kuopio:44517_160");
   AcceptedVehicles.add("fi:kuopio:44517_161");
@@ -278,6 +286,8 @@ test("Testing splitvehicles with multiple vehicles in message", () => {
     buffer: Buffer.from(""),
     eventTimestamp: 0,
   });
+  const promises: Promise<Pulsar.MessageId>[] = [];
+
   splitVehicles(
     logger,
     gtfsrtMessage,
@@ -288,8 +298,17 @@ test("Testing splitvehicles with multiple vehicles in message", () => {
     originMessageId,
     sendCallback,
     vehiclesInMessage,
-    pulsarMessage
+    pulsarMessage,
+    promises
   );
+
+  expect(promises.length).toBe(2);
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises, jest/valid-expect
+  expect(Promise.allSettled(promises)).resolves.toEqual([
+    { status: "fulfilled", value: undefined },
+    { status: "fulfilled", value: undefined },
+  ]);
+  expect(sendCallback).toHaveBeenCalledTimes(2);
   expect(VehicleStateCache.size).toBe(2);
   expect(vehiclesInMessage.size).toBe(2);
   expect(vehiclesInMessage.has("fi:kuopio:44517_160")).toBe(true);
@@ -329,14 +348,21 @@ test("SendNotServicingMessages Should send callback when isServicing is true and
   const sendCallback = jest.fn();
   const vehiclesInMessage: AcceptedVehicles = new Set<UniqueVehicleId>();
   VehicleStateCache.set("fi:kuopio:44517_160", [1667406730, true]);
+  const promises: Promise<Pulsar.MessageId>[] = [];
   sendNotServicingMessages(
     logger,
     VehicleStateCache,
     vehiclesInMessage,
     mainHeader,
     originMessageId,
-    sendCallback
+    sendCallback,
+    promises
   );
+  expect(promises.length).toBe(1);
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises, jest/valid-expect
+  expect(Promise.allSettled(promises)).resolves.toEqual([
+    { status: "fulfilled", value: undefined },
+  ]);
   expect(sendCallback).toHaveBeenCalledTimes(1);
 });
 
@@ -365,13 +391,15 @@ test("SendNotServicingMessages Should not send callback when isServicing is true
   const vehiclesInMessage: AcceptedVehicles = new Set<UniqueVehicleId>();
   vehiclesInMessage.add("fi:kuopio:44517_160");
   VehicleStateCache.set("fi:kuopio:44517_160", [1667406730, true]);
+  const promises: Promise<Pulsar.MessageId>[] = [];
   sendNotServicingMessages(
     logger,
     VehicleStateCache,
     vehiclesInMessage,
     mainHeader,
     originMessageId,
-    sendCallback
+    sendCallback,
+    promises
   );
   expect(sendCallback).toHaveBeenCalledTimes(0);
 });
