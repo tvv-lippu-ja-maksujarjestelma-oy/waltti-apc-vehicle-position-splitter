@@ -234,16 +234,6 @@ export const updateAcceptedVehicles = (
   }
   // Update acceptedVehicles
   if (splittedVehicleMessage != null) {
-    logger.debug(
-      {
-        splittedVehicleMessage:
-          VehicleApcMapping.Convert.vehicleApcMappingToJson(
-            splittedVehicleMessage
-          ),
-        eventTimestamp: cacheMessage.getEventTimestamp(),
-      },
-      "Parsed vehicleRegistryMessage"
-    );
     const pulsarTopic = cacheMessage.getTopicName();
     const feedPublisherId = getFeedDetails(
       feedMap,
@@ -304,13 +294,13 @@ export const updateAcceptedVehicles = (
     });
 
     if (acceptedVehicles.size === 0) {
-      logger.warn(
+      logger.debug(
         {
           acceptedVehicles: Array.from(acceptedVehicles.values()),
           oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
           eventTimestamp: cacheMessage.getEventTimestamp(),
         },
-        "No accepted vehicles"
+        "No accepted vehicles, while building up accepted vehicles"
       );
     } else {
       logger.debug(

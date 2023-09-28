@@ -35,15 +35,6 @@ export const splitVehicles = (
   promises: Promise<Pulsar.MessageId>[]
 ): void => {
   if (acceptedVehicles.size === 0) {
-    logger.warn(
-      {
-        feedPublisherId,
-        originMessageId,
-        vehiclesInMessage: Array.from(vehiclesInMessage.values()),
-        eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-      },
-      "No accepted vehicles"
-    );
     return;
   }
 
