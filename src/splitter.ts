@@ -250,6 +250,7 @@ export const initializeSplitting = async (
         { err },
         "The GTFS Realtime message does not conform to the proto definition"
       );
+      acknowledgeMessage();
       return;
     }
 
