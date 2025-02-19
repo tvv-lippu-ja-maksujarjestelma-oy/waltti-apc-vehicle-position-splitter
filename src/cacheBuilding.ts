@@ -339,6 +339,7 @@ export const buildAcceptedVehicles = async (
   await vehicleReader.seekTimestamp(startTime);
   logger.debug("Seeked to start time");
   let cacheMessage = await vehicleReader.readNext();
+  let latestMessage = cacheMessage;
   logger.debug(
     cacheMessage.getData().toString("utf8"),
     "Read next message data"
@@ -351,8 +352,16 @@ export const buildAcceptedVehicles = async (
   }
   logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
-    // eslint-disable-next-line no-await-in-loop
-    cacheMessage = await vehicleReader.readNext(30000);
+    try {
+      latestMessage = cacheMessage;
+      // eslint-disable-next-line no-await-in-loop
+      cacheMessage = await vehicleReader.readNext(30000);
+    } catch (err) {
+      logger.warn({ err }, "Timeout while reading next message");
+      cacheMessage = latestMessage;
+      break;
+    }
+    logger.debug(cacheMessage.getEventTimestamp(), "Event timestamp");
   }
   logger.debug("Finished reading messages");
   updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
