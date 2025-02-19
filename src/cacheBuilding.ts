@@ -335,6 +335,7 @@ export const buildAcceptedVehicles = async (
   const now = Date.now();
   const startTime = now - cacheWindowInSeconds * 1000;
   logger.info("Building up accepted vehicles");
+  logger.info({ startTime });
   await vehicleReader.seekTimestamp(startTime);
   logger.debug("Seeked to start time");
   let cacheMessage = await vehicleReader.readNext();
