@@ -1,7 +1,7 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
 import { Long } from "protobufjs";
-import { log } from "node:console";
+
 import type {
   UniqueVehicleId,
   PulsarTopic,
