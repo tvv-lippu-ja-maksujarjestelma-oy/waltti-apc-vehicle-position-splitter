@@ -352,7 +352,7 @@ export const buildAcceptedVehicles = async (
   logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
     // eslint-disable-next-line no-await-in-loop
-    cacheMessage = await vehicleReader.readNext();
+    cacheMessage = await vehicleReader.readNext(30000);
   }
   logger.debug("Finished reading messages");
   updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
