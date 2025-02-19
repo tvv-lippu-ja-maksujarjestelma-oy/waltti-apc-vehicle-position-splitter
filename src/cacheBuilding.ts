@@ -1,6 +1,7 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
 import { Long } from "protobufjs";
+
 import type {
   UniqueVehicleId,
   PulsarTopic,
@@ -335,16 +336,23 @@ export const buildAcceptedVehicles = async (
   const startTime = now - cacheWindowInSeconds * 1000;
   logger.info("Building up accepted vehicles");
   await vehicleReader.seekTimestamp(startTime);
+  logger.debug("Seeked to start time");
   let cacheMessage = await vehicleReader.readNext();
+  logger.debug(
+    cacheMessage.getData().toString("utf8"),
+    "Read next message data"
+  );
   // IF there is no message, try bu increasing the start time
   if (cacheMessage == null) {
     logger.info("No message found, increasing start time");
     await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
     cacheMessage = await vehicleReader.readNext();
   }
+  logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
     // eslint-disable-next-line no-await-in-loop
     cacheMessage = await vehicleReader.readNext();
   }
+  logger.debug("Finished reading messages");
   updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
 };
