@@ -341,8 +341,8 @@ export const buildAcceptedVehicles = async (
   let cacheMessage = await vehicleReader.readNext();
   let latestMessage = cacheMessage;
   logger.debug(
-    cacheMessage.getData().toString("utf8"),
-    "Read next message data"
+    cacheMessage.getEventTimestamp(),
+    "Event timestamp of the first message"
   );
   // IF there is no message, try bu increasing the start time
   if (cacheMessage == null) {
