@@ -29,7 +29,11 @@ const exitGracefully = async (
   cacheReader?: Pulsar.Reader
 ) => {
   if (exitError) {
-    logger.fatal(exitError);
+    if (["SIGINT", "SIGQUIT", "SIGTERM"].includes(exitError.message)) {
+      logger.info({ signal: exitError.message }, "Received shutdown signal");
+    } else {
+      logger.fatal(exitError);
+    }
   }
   logger.info("Start exiting gracefully");
   process.exitCode = exitCode;
