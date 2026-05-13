@@ -48,7 +48,7 @@
     "eslint-plugin-prettier": "^4.0.0",
     "jest": "^30.0.0",
     "prettier": "^2.8.8",
-    "protobufjs-cli": "^1.2.0",
+    "protobufjs-cli": "^1.2.1",
     "quicktype": "^23.2.6",
     "ts-jest": "^29.4.0",
     "typescript": "^5.9.3"
