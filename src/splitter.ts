@@ -219,13 +219,19 @@ export const initializeSplitting = async (
     feedMap
   );
 
-  await buildUpCache(
-    logger,
-    vehicleStateCache,
-    cacheReader,
-    cacheWindowInSeconds,
-    feedMap
-  );
+  if (acceptedVehicles.size > 0) {
+    await buildUpCache(
+      logger,
+      vehicleStateCache,
+      cacheReader,
+      cacheWindowInSeconds,
+      feedMap
+    );
+  } else {
+    logger.warn(
+      "Skipping startup cache build because no accepted vehicles were found"
+    );
+  }
 
   const updateVehicleRegistryCache = (vrPulsarMessage: Pulsar.Message) => {
     updateAcceptedVehicles(logger, vrPulsarMessage, feedMap, acceptedVehicles);
