@@ -48,6 +48,18 @@ test("Extracting feed details", () => {
   });
 });
 
+test("Extracting feed details from a split output topic", () => {
+  const feedMap: FeedPublisherMap = new Map([
+    ["persistent://tenant/namespace/gtfsrt-vp-fi-kuopio", "fi:kuopio"],
+  ]);
+  const topic: PulsarTopic =
+    "persistent://tenant/namespace/splitted-gtfsrt-vp-fi-kuopio";
+  const feedDetails = getFeedDetails(feedMap, topic);
+  expect(feedDetails).toEqual({
+    feedPublisherId: "fi:kuopio",
+  });
+});
+
 test("Getting the unique vehicle ID from a valid FeedEntity succeeds", () => {
   const entity: transit_realtime.IFeedEntity = {
     id: "44517_160",

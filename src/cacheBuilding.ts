@@ -34,7 +34,8 @@ export const getFeedDetails = (
     }
   | undefined => {
   let result;
-  const feedPublisherId = feedMap.get(topic);
+  const feedPublisherId =
+    feedMap.get(topic) ?? feedMap.get(topic.replace("/splitted-", "/"));
   if (feedPublisherId !== undefined) {
     result = {
       feedPublisherId,
@@ -247,7 +248,6 @@ export const buildUpCache = async (
       },
       "Finished building up cache"
     );
-    await cacheReader.close();
     logger.info({ cacheSize: cache.size }, "Cache built");
   }
 };
@@ -386,7 +386,6 @@ export const buildAcceptedVehicles = async (
   await vehicleReader.seekTimestamp(startTime);
   logger.debug("Seeked to start time");
   let cacheMessage = await vehicleReader.readNext();
-  let latestMessage = cacheMessage;
   logger.debug(
     cacheMessage.getEventTimestamp(),
     "Event timestamp of the first message"
@@ -397,19 +396,18 @@ export const buildAcceptedVehicles = async (
     await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
     cacheMessage = await vehicleReader.readNext();
   }
+  updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
   logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
     try {
-      latestMessage = cacheMessage;
       // eslint-disable-next-line no-await-in-loop
       cacheMessage = await vehicleReader.readNext(30000);
+      updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
     } catch (err) {
       logger.warn({ err }, "Timeout while reading next message");
-      cacheMessage = latestMessage;
       break;
     }
     logger.debug(cacheMessage.getEventTimestamp(), "Event timestamp");
   }
   logger.debug("Finished reading messages");
-  updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
 };
