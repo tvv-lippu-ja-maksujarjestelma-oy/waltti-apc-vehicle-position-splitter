@@ -211,15 +211,23 @@ export const initializeSplitting = async (
   const acceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
   logger.info("Initializing splitting");
 
+  const vehicleRegistryWindowInSeconds =
+    cacheWindowInSeconds > 0 ? cacheWindowInSeconds : 172800;
+
   await buildAcceptedVehicles(
     logger,
     acceptedVehicles,
     vehicleReader,
-    cacheWindowInSeconds,
+    vehicleRegistryWindowInSeconds,
     feedMap
   );
 
-  if (acceptedVehicles.size > 0) {
+  if (cacheWindowInSeconds <= 0) {
+    logger.warn(
+      { cacheWindowInSeconds },
+      "Skipping startup cache build because cache window is disabled"
+    );
+  } else if (acceptedVehicles.size > 0) {
     await buildUpCache(
       logger,
       vehicleStateCache,

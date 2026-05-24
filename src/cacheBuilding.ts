@@ -35,7 +35,11 @@ export const getFeedDetails = (
   | undefined => {
   let result;
   const feedPublisherId =
-    feedMap.get(topic) ?? feedMap.get(topic.replace("/splitted-", "/"));
+    feedMap.get(topic) ??
+    feedMap.get(topic.replace("/splitted-", "/")) ??
+    (topic.length === 0 && feedMap.size === 1
+      ? feedMap.values().next().value
+      : undefined);
   if (feedPublisherId !== undefined) {
     result = {
       feedPublisherId,
@@ -43,6 +47,15 @@ export const getFeedDetails = (
   }
   return result;
 };
+
+const getMessageLogContext = (message: Pulsar.Message) => ({
+  pulsarTopic: message.getTopicName(),
+  messageID: message.getMessageId().toString(),
+  dataSize: message.getData().length,
+  eventTimestamp: message.getEventTimestamp(),
+  publishTimestamp: message.getPublishTimestamp?.() ?? 0,
+  properties: { ...message.getProperties() },
+});
 
 export const getUniqueVehicleIdFromVehicleApcMapping = (
   vehicleApcMapping: VehicleApcMapping.VehicleApcMapping,
@@ -134,7 +147,6 @@ export const buildUpCache = async (
           break;
         }
 
-        const dataString = cacheMessage.getData().toString("utf8");
         let canProcess = true;
         let feedMessage: transit_realtime.FeedMessage | undefined;
         try {
@@ -145,9 +157,7 @@ export const buildUpCache = async (
           logger.warn(
             {
               err,
-              cacheMessageDataString: dataString,
-              eventTimestamp: cacheMessage.getEventTimestamp(),
-              properties: { ...cacheMessage.getProperties() },
+              cacheMessage: getMessageLogContext(cacheMessage),
             },
             "Could not parse cacheMessage"
           );
@@ -157,9 +167,7 @@ export const buildUpCache = async (
         if (canProcess && feedMessage?.entity[0] == null) {
           logger.warn(
             {
-              cacheMessageDataString: dataString,
-              eventTimestamp: cacheMessage.getEventTimestamp(),
-              properties: { ...cacheMessage.getProperties() },
+              cacheMessage: getMessageLogContext(cacheMessage),
             },
             "Cache message does not contain a feed entity"
           );
@@ -171,9 +179,7 @@ export const buildUpCache = async (
           if (entity0 == null) {
             logger.warn(
               {
-                cacheMessageDataString: dataString,
-                eventTimestamp: cacheMessage.getEventTimestamp(),
-                properties: { ...cacheMessage.getProperties() },
+                cacheMessage: getMessageLogContext(cacheMessage),
               },
               "Cache message does not contain a feed entity"
             );
@@ -185,9 +191,8 @@ export const buildUpCache = async (
             if (feedDetails == null) {
               logger.warn(
                 {
-                  cacheMessageDataString: dataString,
-                  eventTimestamp: cacheMessage.getEventTimestamp(),
-                  properties: { ...cacheMessage.getProperties() },
+                  cacheMessage: getMessageLogContext(cacheMessage),
+                  feedMap: [...feedmap.entries()],
                 },
                 "Could not get feed details from the Pulsar topic name"
               );
@@ -207,9 +212,7 @@ export const buildUpCache = async (
               } else {
                 logger.warn(
                   {
-                    cacheMessageDataString: dataString,
-                    eventTimestamp: cacheMessage.getEventTimestamp(),
-                    properties: { ...cacheMessage.getProperties() },
+                    cacheMessage: getMessageLogContext(cacheMessage),
                   },
                   "Could not get uniqueVehicleId or timestamp from the cacheMessage"
                 );
