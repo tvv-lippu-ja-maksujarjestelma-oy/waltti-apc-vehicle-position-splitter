@@ -212,7 +212,7 @@ export const initializeSplitting = async (
   logger.info("Initializing splitting");
 
   const vehicleRegistryWindowInSeconds =
-    cacheWindowInSeconds > 0 ? cacheWindowInSeconds : 172800;
+    cacheWindowInSeconds > 0 ? cacheWindowInSeconds : 600;
 
   await buildAcceptedVehicles(
     logger,
