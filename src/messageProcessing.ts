@@ -1,14 +1,17 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
-import type { ProcessingConfig, CacheRebuildConfig } from "./config";
+import type {
+  ProcessingConfig,
+  CacheRebuildConfig,
+  MessageProcessingConfig,
+} from "./config";
 import { initializeSplitting } from "./splitter";
-
-const PULSAR_READ_TIMEOUT_MS = 300_000;
 
 const keepReactingToGtfsrt = async (
   logger: pino.Logger,
   producer: Pulsar.Producer,
   gtfsrtConsumer: Pulsar.Consumer,
+  pulsarReadTimeoutMs: number,
   splitVehiclesAndSend: (
     gtfsrtMessage: Pulsar.Message,
     sendCallback: (
@@ -22,12 +25,10 @@ const keepReactingToGtfsrt = async (
   for (;;) {
     let gtfsrtPulsarMessage: Pulsar.Message | undefined;
     try {
-      gtfsrtPulsarMessage = await gtfsrtConsumer.receive(
-        PULSAR_READ_TIMEOUT_MS
-      );
+      gtfsrtPulsarMessage = await gtfsrtConsumer.receive(pulsarReadTimeoutMs);
     } catch (err) {
       logger.warn(
-        { err, readTimeoutMs: PULSAR_READ_TIMEOUT_MS },
+        { err, readTimeoutMs: pulsarReadTimeoutMs },
         "GTFS-RT consumer receive failed"
       );
     }
@@ -70,16 +71,17 @@ const keepReactingToGtfsrt = async (
 const keepReadingVehicleRegistry = async (
   logger: pino.Logger,
   vrReader: Pulsar.Reader,
+  pulsarReadTimeoutMs: number,
   updateVehicleRegistryCache: (apcMessage: Pulsar.Message) => void
 ): Promise<void> => {
   // Errors are handled on the main level.
   for (;;) {
     let vrMessage: Pulsar.Message | undefined;
     try {
-      vrMessage = await vrReader.readNext(PULSAR_READ_TIMEOUT_MS);
+      vrMessage = await vrReader.readNext(pulsarReadTimeoutMs);
     } catch (err) {
       logger.warn(
-        { err, readTimeoutMs: PULSAR_READ_TIMEOUT_MS },
+        { err, readTimeoutMs: pulsarReadTimeoutMs },
         "Vehicle registry reader read failed"
       );
     }
@@ -97,8 +99,10 @@ const keepProcessingMessages = async (
   vrReader: Pulsar.Reader,
   cacheReader: Pulsar.Reader,
   processingConfig: ProcessingConfig,
-  cacheConfig: CacheRebuildConfig
+  cacheConfig: CacheRebuildConfig,
+  messageProcessingConfig: MessageProcessingConfig
 ): Promise<void> => {
+  const { pulsarReadTimeoutMs } = messageProcessingConfig;
   const { updateVehicleRegistryCache, splitVehiclesAndSend } =
     await initializeSplitting(
       logger,
@@ -112,9 +116,15 @@ const keepProcessingMessages = async (
       logger,
       producer,
       gtfsrtConsumer,
+      pulsarReadTimeoutMs,
       splitVehiclesAndSend
     ),
-    keepReadingVehicleRegistry(logger, vrReader, updateVehicleRegistryCache),
+    keepReadingVehicleRegistry(
+      logger,
+      vrReader,
+      pulsarReadTimeoutMs,
+      updateVehicleRegistryCache
+    ),
   ];
   // We expect both promises to stay pending.
   await Promise.all(promises);
