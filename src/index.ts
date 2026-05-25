@@ -205,7 +205,8 @@ const exitGracefully = async (
         vrReader,
         cacheReader,
         config.processing,
-        config.cacheRebuildConfig
+        config.cacheRebuildConfig,
+        config.messageProcessingConfig
       );
     } catch (err) {
       exitHandler(1, transformUnknownToError(err));
