@@ -69,25 +69,13 @@ const keepReactingToGtfsrt = async (
 };
 
 const keepReadingVehicleRegistry = async (
-  logger: pino.Logger,
   vrReader: Pulsar.Reader,
-  pulsarReadTimeoutMs: number,
   updateVehicleRegistryCache: (apcMessage: Pulsar.Message) => void
 ): Promise<void> => {
   // Errors are handled on the main level.
   for (;;) {
-    let vrMessage: Pulsar.Message | undefined;
-    try {
-      vrMessage = await vrReader.readNext(pulsarReadTimeoutMs);
-    } catch (err) {
-      logger.warn(
-        { err, readTimeoutMs: pulsarReadTimeoutMs },
-        "Vehicle registry reader read failed"
-      );
-    }
-    if (vrMessage != null) {
-      updateVehicleRegistryCache(vrMessage);
-    }
+    const vrMessage = await vrReader.readNext();
+    updateVehicleRegistryCache(vrMessage);
   }
   /* eslint-enable no-await-in-loop */
 };
@@ -120,12 +108,7 @@ const keepProcessingMessages = async (
       pulsarReadTimeoutMs,
       splitVehiclesAndSend
     ),
-    keepReadingVehicleRegistry(
-      logger,
-      vrReader,
-      pulsarReadTimeoutMs,
-      updateVehicleRegistryCache
-    ),
+    keepReadingVehicleRegistry(vrReader, updateVehicleRegistryCache),
   ];
   // We expect both promises to stay pending.
   await Promise.all(promises);
