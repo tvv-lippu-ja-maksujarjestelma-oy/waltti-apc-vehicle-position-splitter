@@ -109,7 +109,8 @@ const keepProcessingMessages = async (
       cacheReader,
       vrReader,
       processingConfig,
-      cacheConfig
+      cacheConfig,
+      pulsarReadTimeoutMs
     );
   const promises = [
     keepReactingToGtfsrt(

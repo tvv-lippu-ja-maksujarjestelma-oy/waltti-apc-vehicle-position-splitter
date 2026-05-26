@@ -202,7 +202,8 @@ export const initializeSplitting = async (
   cacheReader: Pulsar.Reader,
   vehicleReader: Pulsar.Reader,
   { feedMap }: ProcessingConfig,
-  { cacheWindowInSeconds }: CacheRebuildConfig
+  { cacheWindowInSeconds }: CacheRebuildConfig,
+  pulsarReadTimeoutMs: number
 ) => {
   const vehicleStateCache: VehicleStateCache = new Map<
     UniqueVehicleId,
@@ -219,7 +220,8 @@ export const initializeSplitting = async (
     acceptedVehicles,
     vehicleReader,
     vehicleRegistryWindowInSeconds,
-    feedMap
+    feedMap,
+    pulsarReadTimeoutMs
   );
 
   if (cacheWindowInSeconds <= 0) {
