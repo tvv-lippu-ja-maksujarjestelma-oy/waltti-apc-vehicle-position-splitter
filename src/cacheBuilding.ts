@@ -390,24 +390,14 @@ export const buildAcceptedVehicles = async (
   await vehicleReader.seekTimestamp(startTime);
   logger.debug("Seeked to start time");
   let cacheMessage: Pulsar.Message | undefined;
-  try {
-    cacheMessage = await vehicleReader.readNext(pulsarReadTimeoutMs);
-  } catch (err) {
-    logger.warn(
-      { err, readTimeoutMs: pulsarReadTimeoutMs },
-      "Timed out while reading first vehicle registry message"
-    );
+  if (vehicleReader.hasNext()) {
+    cacheMessage = await vehicleReader.readNext();
   }
   if (cacheMessage == null) {
     logger.info("No message found, increasing start time");
     await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
-    try {
-      cacheMessage = await vehicleReader.readNext(pulsarReadTimeoutMs);
-    } catch (err) {
-      logger.warn(
-        { err, readTimeoutMs: pulsarReadTimeoutMs },
-        "Timed out while reading vehicle registry message from increased window"
-      );
+    if (vehicleReader.hasNext()) {
+      cacheMessage = await vehicleReader.readNext();
     }
   }
   if (cacheMessage == null) {
@@ -424,14 +414,9 @@ export const buildAcceptedVehicles = async (
   updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
   logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      cacheMessage = await vehicleReader.readNext(pulsarReadTimeoutMs);
-      updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
-    } catch (err) {
-      logger.warn({ err }, "Timeout while reading next message");
-      break;
-    }
+    // eslint-disable-next-line no-await-in-loop
+    cacheMessage = await vehicleReader.readNext();
+    updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
     logger.debug(cacheMessage.getEventTimestamp(), "Event timestamp");
   }
   logger.debug("Finished reading messages");
