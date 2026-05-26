@@ -345,19 +345,19 @@ export const updateAcceptedVehicles = (
     });
 
     if (acceptedVehicles.size === 0) {
-      logger.debug(
+      logger.warn(
         {
-          acceptedVehicles: Array.from(acceptedVehicles.values()),
-          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          acceptedVehiclesCount: acceptedVehicles.size,
+          oldAcceptedVehiclesCount: oldAcceptedVehicles.size,
           eventTimestamp: cacheMessage.getEventTimestamp(),
         },
         "No accepted vehicles, while building up accepted vehicles"
       );
     } else {
-      logger.debug(
+      logger.info(
         {
-          acceptedVehicles: Array.from(acceptedVehicles.values()),
-          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          acceptedVehiclesCount: acceptedVehicles.size,
+          oldAcceptedVehiclesCount: oldAcceptedVehicles.size,
           eventTimestamp: cacheMessage.getEventTimestamp(),
         },
         "Updated accepted vehicles"
@@ -380,7 +380,8 @@ export const buildAcceptedVehicles = async (
   acceptedVehicles: AcceptedVehicles,
   vehicleReader: Pulsar.Reader,
   cacheWindowInSeconds: number,
-  feedMap: FeedPublisherMap
+  feedMap: FeedPublisherMap,
+  pulsarReadTimeoutMs: number
 ): Promise<void> => {
   const now = Date.now();
   const startTime = now - cacheWindowInSeconds * 1000;
@@ -388,23 +389,44 @@ export const buildAcceptedVehicles = async (
   logger.info({ startTime });
   await vehicleReader.seekTimestamp(startTime);
   logger.debug("Seeked to start time");
-  let cacheMessage = await vehicleReader.readNext();
+  let cacheMessage: Pulsar.Message | undefined;
+  try {
+    cacheMessage = await vehicleReader.readNext(pulsarReadTimeoutMs);
+  } catch (err) {
+    logger.warn(
+      { err, readTimeoutMs: pulsarReadTimeoutMs },
+      "Timed out while reading first vehicle registry message"
+    );
+  }
+  if (cacheMessage == null) {
+    logger.info("No message found, increasing start time");
+    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
+    try {
+      cacheMessage = await vehicleReader.readNext(pulsarReadTimeoutMs);
+    } catch (err) {
+      logger.warn(
+        { err, readTimeoutMs: pulsarReadTimeoutMs },
+        "Timed out while reading vehicle registry message from increased window"
+      );
+    }
+  }
+  if (cacheMessage == null) {
+    logger.warn(
+      { cacheWindowInSeconds, readTimeoutMs: pulsarReadTimeoutMs },
+      "Could not build accepted vehicles because no vehicle registry message was available"
+    );
+    return;
+  }
   logger.debug(
     cacheMessage.getEventTimestamp(),
     "Event timestamp of the first message"
   );
-  // IF there is no message, try bu increasing the start time
-  if (cacheMessage == null) {
-    logger.info("No message found, increasing start time");
-    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
-    cacheMessage = await vehicleReader.readNext();
-  }
   updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
   logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      cacheMessage = await vehicleReader.readNext(30000);
+      cacheMessage = await vehicleReader.readNext(pulsarReadTimeoutMs);
       updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
     } catch (err) {
       logger.warn({ err }, "Timeout while reading next message");
