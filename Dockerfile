@@ -52,18 +52,19 @@ RUN apt-get update \
   && apt-get -y --no-install-recommends install \
   'ca-certificates' \
   'tini' \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir /app \
+  && chown 10001:10001 /app
 
-USER node
-RUN mkdir /home/node/app
-WORKDIR /home/node/app
+USER 10001:10001
+WORKDIR /app
 COPY \
-  --chown=node:node \
+  --chown=10001:10001 \
   --from=builder \
   /home/node/app/dist \
   ./dist
 COPY \
-  --chown=node:node \
+  --chown=10001:10001 \
   --from=node_modules \
   /home/node/app/node_modules \
   ./node_modules
