@@ -34,7 +34,12 @@ export const getFeedDetails = (
     }
   | undefined => {
   let result;
-  const feedPublisherId = feedMap.get(topic);
+  const feedPublisherId =
+    feedMap.get(topic) ??
+    feedMap.get(topic.replace("/splitted-", "/")) ??
+    (topic.length === 0 && feedMap.size === 1
+      ? feedMap.values().next().value
+      : undefined);
   if (feedPublisherId !== undefined) {
     result = {
       feedPublisherId,
@@ -42,6 +47,15 @@ export const getFeedDetails = (
   }
   return result;
 };
+
+const getMessageLogContext = (message: Pulsar.Message) => ({
+  pulsarTopic: message.getTopicName(),
+  messageID: message.getMessageId().toString(),
+  dataSize: message.getData().length,
+  eventTimestamp: message.getEventTimestamp(),
+  publishTimestamp: message.getPublishTimestamp?.() ?? 0,
+  properties: { ...message.getProperties() },
+});
 
 export const getUniqueVehicleIdFromVehicleApcMapping = (
   vehicleApcMapping: VehicleApcMapping.VehicleApcMapping,
@@ -105,84 +119,130 @@ export const buildUpCache = async (
   feedmap: FeedPublisherMap
 ): Promise<void> => {
   const now = Date.now();
-  const startTime = now - cacheWindowInSeconds * 1000 * 7;
-  try {
-    await cacheReader.seekTimestamp(startTime);
-    logger.info("Building up cache");
+  const start = now - cacheWindowInSeconds * 1000;
 
-    while (cacheReader.hasNext()) {
-      // eslint-disable-next-line no-await-in-loop
-      const cacheMessage = await cacheReader.readNext();
-      const dataString = cacheMessage.getData().toString("utf8");
-      let feedMessage: transit_realtime.FeedMessage;
+  await cacheReader.seekTimestamp(start);
+  logger.info("Building up cache");
+
+  // Before building up the deduplication cache, the cache reader is moved to the position corresponding to the start of the desired time window.
+  // The following section then reads messages from the Pulsar topic starting from that position until the cache window is filled or there are no more messages.
+  // Each message's relevant deduplication digests are extracted and added to the cache.
+  const cutoffTs = now;
+
+  const READ_TIMEOUT_MS = 1000; // 1s
+  const MAX_CONSECUTIVE_TIMEOUTS = 3; // ~3s of emptiness → stop
+
+  let consecutiveTimeouts = 0;
+
+  try {
+    /* eslint-disable no-await-in-loop, no-constant-condition */
+    while (true) {
       try {
-        feedMessage = transit_realtime.FeedMessage.decode(
-          cacheMessage.getData()
-        );
-      } catch (err) {
-        logger.warn(
-          {
-            err,
-            cacheMessageDataString: dataString,
-            eventTimestamp: cacheMessage.getEventTimestamp(),
-            properties: { ...cacheMessage.getProperties() },
-          },
-          "Could not parse cacheMessage"
-        );
-        return;
-      }
-      if (feedMessage.entity[0] == null) {
-        logger.warn(
-          {
-            cacheMessageDataString: dataString,
-            eventTimestamp: cacheMessage.getEventTimestamp(),
-            properties: { ...cacheMessage.getProperties() },
-          },
-          "Cache message does not contain a feed entity"
-        );
-        return;
-      }
-      // Parse message and add to cache
-      const pulsarTopic = cacheMessage.getTopicName();
-      const timestamp =
-        feedMessage.entity[0].vehicle?.timestamp ||
-        feedMessage.header.timestamp;
-      const feedDetails = getFeedDetails(feedmap, pulsarTopic);
-      if (feedDetails == null) {
-        logger.warn(
-          {
-            cacheMessageDataString: dataString,
-            eventTimestamp: cacheMessage.getEventTimestamp(),
-            properties: { ...cacheMessage.getProperties() },
-          },
-          "Could not get feed details from the Pulsar topic name"
-        );
-        return;
-      }
-      const uniqueVehicleId = getUniqueVehicleId(
-        feedMessage.entity[0],
-        feedDetails.feedPublisherId
-      );
-      // Add to cache
-      if (uniqueVehicleId != null && timestamp != null) {
-        addMessageToCache(
-          logger,
-          cache,
-          cacheMessage,
-          uniqueVehicleId,
-          timestamp
-        );
-      } else {
-        logger.warn(
-          {
-            cacheMessageDataString: dataString,
-            eventTimestamp: cacheMessage.getEventTimestamp(),
-            properties: { ...cacheMessage.getProperties() },
-          },
-          "Could not get uniqueVehicleId or timestamp from the cacheMessage"
-        );
+        const cacheMessage = await cacheReader.readNext(READ_TIMEOUT_MS);
+
+        const publishTs = cacheMessage.getPublishTimestamp?.() ?? 0;
+        const eventTs = cacheMessage.getEventTimestamp?.() ?? 0;
+        const ts = publishTs > 0 ? publishTs : eventTs;
+        if (ts > cutoffTs) {
+          break;
+        }
+
+        let canProcess = true;
+        let feedMessage: transit_realtime.FeedMessage | undefined;
+        try {
+          feedMessage = transit_realtime.FeedMessage.decode(
+            cacheMessage.getData()
+          );
+        } catch (err) {
+          logger.warn(
+            {
+              err,
+              cacheMessage: getMessageLogContext(cacheMessage),
+            },
+            "Could not parse cacheMessage"
+          );
+          canProcess = false;
+        }
+
+        if (canProcess && feedMessage?.entity[0] == null) {
+          logger.warn(
+            {
+              cacheMessage: getMessageLogContext(cacheMessage),
+            },
+            "Cache message does not contain a feed entity"
+          );
+          canProcess = false;
+        }
+
+        if (canProcess && feedMessage != null) {
+          const entity0 = feedMessage.entity[0];
+          if (entity0 == null) {
+            logger.warn(
+              {
+                cacheMessage: getMessageLogContext(cacheMessage),
+              },
+              "Cache message does not contain a feed entity"
+            );
+          } else {
+            const pulsarTopic = cacheMessage.getTopicName();
+            const timestamp =
+              entity0.vehicle?.timestamp || feedMessage.header.timestamp;
+            const feedDetails = getFeedDetails(feedmap, pulsarTopic);
+            if (feedDetails == null) {
+              logger.warn(
+                {
+                  cacheMessage: getMessageLogContext(cacheMessage),
+                  feedMap: [...feedmap.entries()],
+                },
+                "Could not get feed details from the Pulsar topic name"
+              );
+            } else {
+              const uniqueVehicleId = getUniqueVehicleId(
+                entity0,
+                feedDetails.feedPublisherId
+              );
+              if (uniqueVehicleId != null && timestamp != null) {
+                addMessageToCache(
+                  logger,
+                  cache,
+                  cacheMessage,
+                  uniqueVehicleId,
+                  timestamp
+                );
+              } else {
+                logger.warn(
+                  {
+                    cacheMessage: getMessageLogContext(cacheMessage),
+                  },
+                  "Could not get uniqueVehicleId or timestamp from the cacheMessage"
+                );
+              }
+            }
+          }
+        }
+
+        consecutiveTimeouts = 0;
+      } catch (e) {
+        const err = e as {
+          name?: string;
+          code?: unknown;
+          message?: unknown;
+        };
+        const isTimeout =
+          err?.name === "TimeoutError" ||
+          err?.code === ("Timeout" as unknown) ||
+          (typeof err?.message === "string" && /timeout/i.test(err.message));
+
+        if (!isTimeout) throw e;
+
+        consecutiveTimeouts += 1;
+        if (consecutiveTimeouts >= MAX_CONSECUTIVE_TIMEOUTS) {
+          break;
+        }
       }
     }
+    /* eslint-enable no-await-in-loop, no-constant-condition */
+  } finally {
     logger.info(
       {
         cacheSize: cache.size,
@@ -191,18 +251,8 @@ export const buildUpCache = async (
       },
       "Finished building up cache"
     );
-  } catch (err) {
-    logger.error(
-      {
-        err,
-        eventTimestamp: Date.now(),
-        feedmap: [...feedmap.entries()],
-      },
-      "Error building up cache"
-    );
+    logger.info({ cacheSize: cache.size }, "Cache built");
   }
-  logger.info({ cacheSize: cache.size }, "Cache built");
-  await cacheReader.close();
 };
 
 export const updateAcceptedVehicles = (
@@ -295,19 +345,19 @@ export const updateAcceptedVehicles = (
     });
 
     if (acceptedVehicles.size === 0) {
-      logger.debug(
+      logger.warn(
         {
-          acceptedVehicles: Array.from(acceptedVehicles.values()),
-          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          acceptedVehiclesCount: acceptedVehicles.size,
+          oldAcceptedVehiclesCount: oldAcceptedVehicles.size,
           eventTimestamp: cacheMessage.getEventTimestamp(),
         },
         "No accepted vehicles, while building up accepted vehicles"
       );
     } else {
-      logger.debug(
+      logger.info(
         {
-          acceptedVehicles: Array.from(acceptedVehicles.values()),
-          oldAcceptedVehicles: Array.from(oldAcceptedVehicles.values()),
+          acceptedVehiclesCount: acceptedVehicles.size,
+          oldAcceptedVehiclesCount: oldAcceptedVehicles.size,
           eventTimestamp: cacheMessage.getEventTimestamp(),
         },
         "Updated accepted vehicles"
@@ -330,7 +380,8 @@ export const buildAcceptedVehicles = async (
   acceptedVehicles: AcceptedVehicles,
   vehicleReader: Pulsar.Reader,
   cacheWindowInSeconds: number,
-  feedMap: FeedPublisherMap
+  feedMap: FeedPublisherMap,
+  pulsarReadTimeoutMs: number
 ): Promise<void> => {
   const now = Date.now();
   const startTime = now - cacheWindowInSeconds * 1000;
@@ -338,31 +389,35 @@ export const buildAcceptedVehicles = async (
   logger.info({ startTime });
   await vehicleReader.seekTimestamp(startTime);
   logger.debug("Seeked to start time");
-  let cacheMessage = await vehicleReader.readNext();
-  let latestMessage = cacheMessage;
+  let cacheMessage: Pulsar.Message | undefined;
+  if (vehicleReader.hasNext()) {
+    cacheMessage = await vehicleReader.readNext();
+  }
+  if (cacheMessage == null) {
+    logger.info("No message found, increasing start time");
+    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
+    if (vehicleReader.hasNext()) {
+      cacheMessage = await vehicleReader.readNext();
+    }
+  }
+  if (cacheMessage == null) {
+    logger.warn(
+      { cacheWindowInSeconds, readTimeoutMs: pulsarReadTimeoutMs },
+      "Could not build accepted vehicles because no vehicle registry message was available"
+    );
+    return;
+  }
   logger.debug(
     cacheMessage.getEventTimestamp(),
     "Event timestamp of the first message"
   );
-  // IF there is no message, try bu increasing the start time
-  if (cacheMessage == null) {
-    logger.info("No message found, increasing start time");
-    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
-    cacheMessage = await vehicleReader.readNext();
-  }
+  updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
   logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
-    try {
-      latestMessage = cacheMessage;
-      // eslint-disable-next-line no-await-in-loop
-      cacheMessage = await vehicleReader.readNext(30000);
-    } catch (err) {
-      logger.warn({ err }, "Timeout while reading next message");
-      cacheMessage = latestMessage;
-      break;
-    }
+    // eslint-disable-next-line no-await-in-loop
+    cacheMessage = await vehicleReader.readNext();
+    updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
     logger.debug(cacheMessage.getEventTimestamp(), "Event timestamp");
   }
   logger.debug("Finished reading messages");
-  updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
 };

@@ -1,12 +1,17 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
-import type { ProcessingConfig, CacheRebuildConfig } from "./config";
+import type {
+  ProcessingConfig,
+  CacheRebuildConfig,
+  MessageProcessingConfig,
+} from "./config";
 import { initializeSplitting } from "./splitter";
 
 const keepReactingToGtfsrt = async (
   logger: pino.Logger,
   producer: Pulsar.Producer,
   gtfsrtConsumer: Pulsar.Consumer,
+  pulsarReadTimeoutMs: number,
   splitVehiclesAndSend: (
     gtfsrtMessage: Pulsar.Message,
     sendCallback: (
@@ -18,37 +23,47 @@ const keepReactingToGtfsrt = async (
   // Errors are handled in the calling function.
   /* eslint-disable no-await-in-loop */
   for (;;) {
-    const gtfsrtPulsarMessage = await gtfsrtConsumer.receive();
-    logger.debug(
-      {
-        topic: gtfsrtPulsarMessage.getTopicName(),
-        eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-        messageId: gtfsrtPulsarMessage.getMessageId().toString(),
-        properties: { ...gtfsrtPulsarMessage.getProperties() },
-      },
-      "Received gtfsrtPulsarMessage"
-    );
-    splitVehiclesAndSend(
-      gtfsrtPulsarMessage,
-      (splittedVehicle) => {
-        logger.debug("Sending splitter VP message");
-        // In case of an error, exit via the listener on unhandledRejection.
-        return producer.send(splittedVehicle);
-      },
-      () => {
-        logger.debug(
-          {
-            topic: gtfsrtPulsarMessage.getTopicName(),
-            eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
-            messageId: gtfsrtPulsarMessage.getMessageId().toString(),
-            properties: { ...gtfsrtPulsarMessage.getProperties() },
-          },
-          "Ack gtfsrtPulsarMessage"
-        );
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        gtfsrtConsumer.acknowledge(gtfsrtPulsarMessage);
-      }
-    );
+    let gtfsrtPulsarMessage: Pulsar.Message | undefined;
+    try {
+      gtfsrtPulsarMessage = await gtfsrtConsumer.receive(pulsarReadTimeoutMs);
+    } catch (err) {
+      logger.warn(
+        { err, readTimeoutMs: pulsarReadTimeoutMs },
+        "GTFS-RT consumer receive failed"
+      );
+    }
+    if (gtfsrtPulsarMessage != null) {
+      logger.debug(
+        {
+          topic: gtfsrtPulsarMessage.getTopicName(),
+          eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+          messageId: gtfsrtPulsarMessage.getMessageId().toString(),
+          properties: { ...gtfsrtPulsarMessage.getProperties() },
+        },
+        "Received gtfsrtPulsarMessage"
+      );
+      splitVehiclesAndSend(
+        gtfsrtPulsarMessage,
+        (splittedVehicle) => {
+          logger.debug("Sending splitter VP message");
+          // In case of an error, exit via the listener on unhandledRejection.
+          return producer.send(splittedVehicle);
+        },
+        () => {
+          logger.debug(
+            {
+              topic: gtfsrtPulsarMessage.getTopicName(),
+              eventTimestamp: gtfsrtPulsarMessage.getEventTimestamp(),
+              messageId: gtfsrtPulsarMessage.getMessageId().toString(),
+              properties: { ...gtfsrtPulsarMessage.getProperties() },
+            },
+            "Ack gtfsrtPulsarMessage"
+          );
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          gtfsrtConsumer.acknowledge(gtfsrtPulsarMessage);
+        }
+      );
+    }
   }
   // In case of an error, exit via the listener on unhandledRejection.
 };
@@ -72,27 +87,31 @@ const keepProcessingMessages = async (
   vrReader: Pulsar.Reader,
   cacheReader: Pulsar.Reader,
   processingConfig: ProcessingConfig,
-  cacheConfig: CacheRebuildConfig
+  cacheConfig: CacheRebuildConfig,
+  messageProcessingConfig: MessageProcessingConfig
 ): Promise<void> => {
+  const { pulsarReadTimeoutMs } = messageProcessingConfig;
   const { updateVehicleRegistryCache, splitVehiclesAndSend } =
     await initializeSplitting(
       logger,
       cacheReader,
       vrReader,
       processingConfig,
-      cacheConfig
+      cacheConfig,
+      pulsarReadTimeoutMs
     );
   const promises = [
     keepReactingToGtfsrt(
       logger,
       producer,
       gtfsrtConsumer,
+      pulsarReadTimeoutMs,
       splitVehiclesAndSend
     ),
     keepReadingVehicleRegistry(vrReader, updateVehicleRegistryCache),
   ];
   // We expect both promises to stay pending.
-  await Promise.any(promises);
+  await Promise.all(promises);
 };
 
 export default keepProcessingMessages;

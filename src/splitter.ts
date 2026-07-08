@@ -202,7 +202,8 @@ export const initializeSplitting = async (
   cacheReader: Pulsar.Reader,
   vehicleReader: Pulsar.Reader,
   { feedMap }: ProcessingConfig,
-  { cacheWindowInSeconds }: CacheRebuildConfig
+  { cacheWindowInSeconds }: CacheRebuildConfig,
+  pulsarReadTimeoutMs: number
 ) => {
   const vehicleStateCache: VehicleStateCache = new Map<
     UniqueVehicleId,
@@ -211,21 +212,36 @@ export const initializeSplitting = async (
   const acceptedVehicles: AcceptedVehicles = new Set<UniqueVehicleId>();
   logger.info("Initializing splitting");
 
+  const vehicleRegistryWindowInSeconds =
+    cacheWindowInSeconds > 0 ? cacheWindowInSeconds : 600;
+
   await buildAcceptedVehicles(
     logger,
     acceptedVehicles,
     vehicleReader,
-    cacheWindowInSeconds,
-    feedMap
+    vehicleRegistryWindowInSeconds,
+    feedMap,
+    pulsarReadTimeoutMs
   );
 
-  await buildUpCache(
-    logger,
-    vehicleStateCache,
-    cacheReader,
-    cacheWindowInSeconds,
-    feedMap
-  );
+  if (cacheWindowInSeconds <= 0) {
+    logger.warn(
+      { cacheWindowInSeconds },
+      "Skipping startup cache build because cache window is disabled"
+    );
+  } else if (acceptedVehicles.size > 0) {
+    await buildUpCache(
+      logger,
+      vehicleStateCache,
+      cacheReader,
+      cacheWindowInSeconds,
+      feedMap
+    );
+  } else {
+    logger.warn(
+      "Skipping startup cache build because no accepted vehicles were found"
+    );
+  }
 
   const updateVehicleRegistryCache = (vrPulsarMessage: Pulsar.Message) => {
     updateAcceptedVehicles(logger, vrPulsarMessage, feedMap, acceptedVehicles);

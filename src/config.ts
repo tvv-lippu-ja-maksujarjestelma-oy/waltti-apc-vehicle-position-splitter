@@ -58,11 +58,16 @@ export interface CacheRebuildConfig {
   cacheWindowInSeconds: number;
 }
 
+export interface MessageProcessingConfig {
+  pulsarReadTimeoutMs: number;
+}
+
 export interface Config {
   processing: ProcessingConfig;
   pulsar: PulsarConfig;
   healthCheck: HealthCheckConfig;
   cacheRebuildConfig: CacheRebuildConfig;
+  messageProcessingConfig: MessageProcessingConfig;
 }
 
 const getRequired = (envVariable: string) => {
@@ -229,6 +234,14 @@ const getCacheRebuildConfig = () => {
   };
 };
 
+const getMessageProcessingConfig = () => {
+  const pulsarReadTimeoutMs =
+    getOptionalNonNegativeFloat("PULSAR_READ_TIMEOUT_MS") ?? 300_000;
+  return {
+    pulsarReadTimeoutMs,
+  };
+};
+
 const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
   const oauth2Config = getPulsarOauth2Config();
   const serviceUrl = getRequired("PULSAR_SERVICE_URL");
@@ -293,6 +306,7 @@ const getHealthCheckConfig = () => {
 export const getConfig = (logger: pino.Logger): Config => ({
   processing: getProcessingConfig(),
   cacheRebuildConfig: getCacheRebuildConfig(),
+  messageProcessingConfig: getMessageProcessingConfig(),
   pulsar: getPulsarConfig(logger),
   healthCheck: getHealthCheckConfig(),
 });
