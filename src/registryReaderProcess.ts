@@ -12,7 +12,7 @@ interface Request {
 let client: Pulsar.Client | undefined;
 let reader: Pulsar.Reader | undefined;
 // Do not leave an orphan native client if the application exits unexpectedly.
-process.on("disconnect", () => process.exit(0)); // eslint-disable-line no-process-exit
+process.on("disconnect", () => process.exit(0));
 process.on("message", (request: Request) => {
   const handle = async () => {
     try {
@@ -66,5 +66,5 @@ process.on("message", (request: Request) => {
     }
   };
   // The handler delivers all failures over IPC.
-  handle().catch(() => process.exit(1)); // eslint-disable-line no-process-exit
+  handle().catch(() => process.exit(1));
 });

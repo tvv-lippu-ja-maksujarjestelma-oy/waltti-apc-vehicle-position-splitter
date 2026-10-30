@@ -12,7 +12,7 @@ const message = (data: Buffer, topic: string): Pulsar.Message =>
     getEventTimestamp: () => Date.now() - 6 * 3600 * 1000,
     getPublishTimestamp: () => Date.now() - 6 * 3600 * 1000,
     getProperties: () => ({}),
-  } as Pulsar.Message);
+  }) as Pulsar.Message;
 const pending = <T>(): Promise<T> =>
   new Promise(() => {
     /* Inert fixture wait. */

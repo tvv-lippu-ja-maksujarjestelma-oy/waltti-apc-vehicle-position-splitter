@@ -92,7 +92,6 @@ export const addMessageToCache = (
             eventTimestamp: cacheMessage.getEventTimestamp(),
             properties: { ...cacheMessage.getProperties() },
           },
-          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
           `Vehicle has changed servicing status to ${!notServicing}`
         );
       }
@@ -136,7 +135,6 @@ export const buildUpCache = async (
   let consecutiveTimeouts = 0;
 
   try {
-    /* eslint-disable no-await-in-loop, no-constant-condition */
     while (true) {
       try {
         const cacheMessage = await cacheReader.readNext(READ_TIMEOUT_MS);
@@ -242,7 +240,6 @@ export const buildUpCache = async (
         }
       }
     }
-    /* eslint-enable no-await-in-loop, no-constant-condition */
   } finally {
     logger.info(
       {
@@ -410,7 +407,6 @@ export const buildAcceptedVehicles = async (
   let initialized = false;
   const startupTimestamp = Date.now();
   logger.info("Hydrating retained vehicle catalogue");
-  /* eslint-disable no-await-in-loop, no-constant-condition */
   while (true) {
     // Await also supports clients whose availability check is asynchronous.
     // Read only when available. In particular, do not repeatedly time out native
@@ -444,5 +440,4 @@ export const buildAcceptedVehicles = async (
       setTimeout(resolve, delayMs);
     });
   }
-  /* eslint-enable no-await-in-loop, no-constant-condition */
 };

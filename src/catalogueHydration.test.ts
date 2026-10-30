@@ -12,7 +12,7 @@ const snapshot = (data: unknown, ageMs = 6 * 3600 * 1000): Pulsar.Message =>
     getEventTimestamp: () => Date.now() - ageMs,
     getPublishTimestamp: () => Date.now() - ageMs,
     getProperties: () => ({}),
-  } as Pulsar.Message);
+  }) as Pulsar.Message;
 const catalogue = (name: string) => [
   {
     operatorId: "6852",
