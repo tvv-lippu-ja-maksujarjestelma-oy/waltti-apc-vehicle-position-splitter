@@ -1,5 +1,6 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
+import type { RegistryReader } from "./registryReader";
 import { transit_realtime } from "./protobuf/gtfsRealtime";
 import {
   buildUpCache,
@@ -200,7 +201,7 @@ export const sendNotServicingMessages = (
 export const initializeSplitting = async (
   logger: pino.Logger,
   cacheReader: Pulsar.Reader,
-  vehicleReader: Pulsar.Reader,
+  vehicleReader: RegistryReader,
   { feedMap }: ProcessingConfig,
   { cacheWindowInSeconds }: CacheRebuildConfig,
   pulsarReadTimeoutMs: number

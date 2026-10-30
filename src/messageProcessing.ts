@@ -1,5 +1,6 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
+import type { RegistryReader } from "./registryReader";
 import type {
   ProcessingConfig,
   CacheRebuildConfig,
@@ -68,7 +69,7 @@ const keepReactingToGtfsrt = async (
 };
 
 const keepReadingVehicleRegistry = async (
-  vrReader: Pulsar.Reader,
+  vrReader: RegistryReader,
   updateVehicleRegistryCache: (apcMessage: Pulsar.Message) => void
 ): Promise<void> => {
   // Errors are handled on the main level.
@@ -82,12 +83,14 @@ const keepProcessingMessages = async (
   logger: pino.Logger,
   producer: Pulsar.Producer,
   gtfsrtConsumer: Pulsar.Consumer,
-  vrReader: Pulsar.Reader,
+  vrReader: RegistryReader,
   cacheReader: Pulsar.Reader,
   processingConfig: ProcessingConfig,
   cacheConfig: CacheRebuildConfig,
-  messageProcessingConfig: MessageProcessingConfig
+  messageProcessingConfig: MessageProcessingConfig,
+  setReady: (ready: boolean) => void = () => undefined
 ): Promise<void> => {
+  setReady(false);
   const { pulsarReadTimeoutMs } = messageProcessingConfig;
   const { updateVehicleRegistryCache, splitVehiclesAndSend } =
     await initializeSplitting(
@@ -98,6 +101,7 @@ const keepProcessingMessages = async (
       cacheConfig,
       pulsarReadTimeoutMs
     );
+  setReady(true);
   const promises = [
     keepReactingToGtfsrt(
       logger,
