@@ -91,7 +91,6 @@ export const addMessageToCache = (
             eventTimestamp: cacheMessage.getEventTimestamp(),
             properties: { ...cacheMessage.getProperties() },
           },
-          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
           `Vehicle has changed servicing status to ${!notServicing}`
         );
       }
@@ -135,7 +134,6 @@ export const buildUpCache = async (
   let consecutiveTimeouts = 0;
 
   try {
-    /* eslint-disable no-await-in-loop, no-constant-condition */
     while (true) {
       try {
         const cacheMessage = await cacheReader.readNext(READ_TIMEOUT_MS);
@@ -241,7 +239,6 @@ export const buildUpCache = async (
         }
       }
     }
-    /* eslint-enable no-await-in-loop, no-constant-condition */
   } finally {
     logger.info(
       {
@@ -414,7 +411,6 @@ export const buildAcceptedVehicles = async (
   updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
   logger.debug("Reading messages");
   while (vehicleReader.hasNext()) {
-    // eslint-disable-next-line no-await-in-loop
     cacheMessage = await vehicleReader.readNext();
     updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
     logger.debug(cacheMessage.getEventTimestamp(), "Event timestamp");

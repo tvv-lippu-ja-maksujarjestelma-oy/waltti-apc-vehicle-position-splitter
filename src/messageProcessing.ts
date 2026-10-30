@@ -21,7 +21,6 @@ const keepReactingToGtfsrt = async (
   ) => void
 ) => {
   // Errors are handled in the calling function.
-  /* eslint-disable no-await-in-loop */
   for (;;) {
     let gtfsrtPulsarMessage: Pulsar.Message | undefined;
     try {
@@ -77,7 +76,6 @@ const keepReadingVehicleRegistry = async (
     const vrMessage = await vrReader.readNext();
     updateVehicleRegistryCache(vrMessage);
   }
-  /* eslint-enable no-await-in-loop */
 };
 
 const keepProcessingMessages = async (
