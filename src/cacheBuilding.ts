@@ -1,6 +1,7 @@
 import type pino from "pino";
 import type Pulsar from "pulsar-client";
 import { Long } from "protobufjs";
+import type { RegistryReader } from "./registryReader";
 
 import type {
   UniqueVehicleId,
@@ -257,7 +258,7 @@ export const updateAcceptedVehicles = (
   cacheMessage: Pulsar.Message,
   feedMap: FeedPublisherMap,
   acceptedVehicles: AcceptedVehicles
-): void => {
+): boolean => {
   const dataString = cacheMessage.getData().toString("utf8");
   const oldAcceptedVehicles = new Set(acceptedVehicles);
   logger.info(
@@ -280,6 +281,24 @@ export const updateAcceptedVehicles = (
       "Could not parse vehicleRegistryMessage"
     );
   }
+  if (
+    splittedVehicleMessage != null &&
+    splittedVehicleMessage.some(
+      (vehicle) =>
+        vehicle.operatorId.length === 0 ||
+        vehicle.vehicleShortName.length === 0 ||
+        vehicle.equipment.length === 0 ||
+        vehicle.equipment.some(
+          (item) => item.type.length === 0 || item.id.length === 0
+        )
+    )
+  ) {
+    logger.warn(
+      getMessageLogContext(cacheMessage),
+      "Vehicle catalogue violates required identifier or equipment constraints"
+    );
+    return false;
+  }
   // Update acceptedVehicles
   if (splittedVehicleMessage != null) {
     const pulsarTopic = cacheMessage.getTopicName();
@@ -298,7 +317,7 @@ export const updateAcceptedVehicles = (
         },
         "Could not get feedPublisherId from the Pulsar topic name"
       );
-      return;
+      return false;
     }
     acceptedVehicles.clear();
     splittedVehicleMessage.forEach((vehicle) => {
@@ -370,50 +389,55 @@ export const updateAcceptedVehicles = (
       "Could not parse vehicleRegistryMessage"
     );
   }
+  return splittedVehicleMessage != null;
 };
 
 export const buildAcceptedVehicles = async (
   logger: pino.Logger,
   acceptedVehicles: AcceptedVehicles,
-  vehicleReader: Pulsar.Reader,
-  cacheWindowInSeconds: number,
+  vehicleReader: RegistryReader,
+  _cacheWindowInSeconds: number,
   feedMap: FeedPublisherMap,
   pulsarReadTimeoutMs: number
 ): Promise<void> => {
-  const now = Date.now();
-  const startTime = now - cacheWindowInSeconds * 1000;
-  logger.info("Building up accepted vehicles");
-  logger.info({ startTime });
-  await vehicleReader.seekTimestamp(startTime);
-  logger.debug("Seeked to start time");
-  let cacheMessage: Pulsar.Message | undefined;
-  if (vehicleReader.hasNext()) {
-    cacheMessage = await vehicleReader.readNext();
-  }
-  if (cacheMessage == null) {
-    logger.info("No message found, increasing start time");
-    await vehicleReader.seekTimestamp(now - cacheWindowInSeconds * 1000 * 7);
-    if (vehicleReader.hasNext()) {
-      cacheMessage = await vehicleReader.readNext();
+  // The reader starts at MessageId.earliest(). A catalogue is a full snapshot,
+  // so retain only the last valid one while draining retained history.
+  // Never seek by a short time window: registry polling can be six hours apart.
+  const pollIntervalMs = Math.min(Math.max(pulsarReadTimeoutMs, 100), 1000);
+  let initialized = false;
+  const startupTimestamp = Date.now();
+  logger.info("Hydrating retained vehicle catalogue");
+  while (true) {
+    // Await also supports clients whose availability check is asynchronous.
+    // Read only when available. In particular, do not repeatedly time out native
+    // readNext workers while waiting for the first snapshot.
+    const available = await Promise.resolve(vehicleReader.hasNext());
+    if (available) {
+      const message = await vehicleReader.readNext();
+      const valid = updateAcceptedVehicles(
+        logger,
+        message,
+        feedMap,
+        acceptedVehicles
+      );
+      initialized = valid || initialized;
+      // A live stream must not keep startup draining forever. The first valid
+      // snapshot at/after startup is already current enough to open the gate.
+      if (valid && message.getPublishTimestamp() >= startupTimestamp) {
+        return;
+      }
+    } else if (initialized) {
+      logger.info(
+        { acceptedVehiclesCount: acceptedVehicles.size },
+        "Catalogue hydrated"
+      );
+      return;
     }
+    // Bound work per event-loop turn, including malformed or continuous input.
+    // No positions are received or acknowledged while hydration is pending.
+    const delayMs = available ? 1 : pollIntervalMs;
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, delayMs);
+    });
   }
-  if (cacheMessage == null) {
-    logger.warn(
-      { cacheWindowInSeconds, readTimeoutMs: pulsarReadTimeoutMs },
-      "Could not build accepted vehicles because no vehicle registry message was available"
-    );
-    return;
-  }
-  logger.debug(
-    cacheMessage.getEventTimestamp(),
-    "Event timestamp of the first message"
-  );
-  updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
-  logger.debug("Reading messages");
-  while (vehicleReader.hasNext()) {
-    cacheMessage = await vehicleReader.readNext();
-    updateAcceptedVehicles(logger, cacheMessage, feedMap, acceptedVehicles);
-    logger.debug(cacheMessage.getEventTimestamp(), "Event timestamp");
-  }
-  logger.debug("Finished reading messages");
 };

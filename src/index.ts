@@ -1,6 +1,8 @@
 import pino from "pino";
 import type Pulsar from "pulsar-client";
 
+import { createRegistryReader } from "./registryReader";
+import type { RegistryReader } from "./registryReader";
 import { getConfig } from "./config";
 import createHealthCheckServer from "./healthCheck";
 import keepProcessingMessages from "./messageProcessing";
@@ -25,7 +27,7 @@ const exitGracefully = async (
   client?: Pulsar.Client,
   producer?: Pulsar.Producer,
   gtfsrtConsumer?: Pulsar.Consumer,
-  vrReader?: Pulsar.Reader,
+  vrReader?: RegistryReader,
   cacheReader?: Pulsar.Reader
 ) => {
   if (exitError) {
@@ -131,11 +133,12 @@ const exitGracefully = async (
     const logger = createLogger({ name: serviceName });
 
     let setHealthOk: (isOk: boolean) => void;
+    let setReady: (ready: boolean) => void;
     let closeHealthCheckServer: () => Promise<void>;
     let client: Pulsar.Client;
     let producer: Pulsar.Producer;
     let gtfsrtConsumer: Pulsar.Consumer;
-    let vrReader: Pulsar.Reader;
+    let vrReader: RegistryReader;
     let cacheReader: Pulsar.Reader;
 
     const exitHandler = (exitCode: number, exitError?: Error) => {
@@ -172,9 +175,8 @@ const exitGracefully = async (
       const config = getConfig(logger);
       logger.info("Create mapping functions");
       logger.info("Create health check server");
-      ({ closeHealthCheckServer, setHealthOk } = createHealthCheckServer(
-        config.healthCheck
-      ));
+      ({ closeHealthCheckServer, setHealthOk, setReady } =
+        createHealthCheckServer(config.healthCheck));
       logger.info("Create Pulsar client");
       client = createPulsarClient(config.pulsar);
       logger.info("Create Pulsar producer");
@@ -184,11 +186,6 @@ const exitGracefully = async (
         client,
         config.pulsar.gtfsrtConsumerConfig
       );
-      logger.info("Create Vehicle registery Pulsar reader");
-      vrReader = await createPulsarCacheReader(
-        client,
-        config.pulsar.vehicleRegistryReaderConfig
-      );
       logger.info("Create Vehicle cache reader");
       cacheReader = await createPulsarCacheReader(
         client,
@@ -197,6 +194,8 @@ const exitGracefully = async (
 
       logger.info("Set health check status to OK");
       setHealthOk(true);
+      logger.info("Create Vehicle registry Pulsar reader process");
+      vrReader = await createRegistryReader(config.pulsar);
       logger.info("Keep processing messages");
       await keepProcessingMessages(
         logger,
@@ -206,7 +205,8 @@ const exitGracefully = async (
         cacheReader,
         config.processing,
         config.cacheRebuildConfig,
-        config.messageProcessingConfig
+        config.messageProcessingConfig,
+        setReady
       );
     } catch (err) {
       exitHandler(1, transformUnknownToError(err));

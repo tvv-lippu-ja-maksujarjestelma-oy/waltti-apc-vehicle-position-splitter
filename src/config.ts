@@ -290,6 +290,7 @@ const getPulsarConfig = (logger: pino.Logger): PulsarConfig => {
     },
     vehicleRegistryReaderConfig: {
       topic: vehicleReaderTopic,
+      receiverQueueSize: 1,
       readerName: vehicleReaderName,
       startMessageId: vehicleReaderStartMessageId,
     },
